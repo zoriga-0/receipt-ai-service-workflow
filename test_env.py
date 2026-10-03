@@ -1,0 +1,4 @@
+from config import UPSTAGE_API_KEY
+
+print("API KEY EXISTS:", bool(UPSTAGE_API_KEY))
+print("API KEY PREFIX:", UPSTAGE_API_KEY[:5] if UPSTAGE_API_KEY else "NONE")
