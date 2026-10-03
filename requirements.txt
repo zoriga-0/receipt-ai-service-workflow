@@ -29,10 +29,8 @@ referencing==0.37.0
 requests==2.34.2
 rpds-py==2026.6.3
 six==1.17.0
-starlette==1.7.0
 streamlit==1.65.0
 toml==0.10.2
 typing_extensions==4.16.0
 urllib3==2.8.0
-uvicorn==0.54.0
 websockets==17.1
