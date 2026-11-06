@@ -1,7 +1,8 @@
 """
 theme.py
 
-화면 디자인 (CSS). 시안 3가지:
+화면 디자인 (CSS). 시안:
+  team    : 연회색 바탕 + 흰 카드(얇은 테두리) + 파란 포인트 (팀 디자인, 기본값)
   toss    : 밝은 회색 바탕 + 흰 카드 + 파란 버튼, 큰 글씨 (토스 느낌)
   minimal : 흰 바탕 + 얇은 선 + 검은 버튼, 담백하게 (노션 느낌)
   receipt : 종이 색 바탕 + 점선 + 고정폭 숫자 (영수증 느낌)
@@ -14,7 +15,7 @@ import os
 
 import streamlit as st
 
-THEMES = ("toss", "minimal", "receipt")
+THEMES = ("team", "toss", "minimal", "receipt")
 
 FONT_IMPORTS = """
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
@@ -26,29 +27,37 @@ _MONO = "'JetBrains Mono', 'Pretendard Variable', Pretendard, monospace"
 
 # 시안별 색·모양 (라이트, 다크)
 VARS = {
+    "team": (
+        dict(bg="#F6F7F9", card="#FFFFFF", text="#17202B", muted="#667085", line="#E3E7EC",
+             accent="#2F6FED", on_accent="#FFFFFF", soft="#EEF4FF", warn="#C2410C", ok="#15803D",
+             radius="12px", btn_radius="10px", border="1px solid var(--rc-line)",
+             font=_SANS, num=_SANS, brand=_SANS, h1="28px", h1_weight="800", btn_h="48px"),
+        dict(bg="#0F1115", card="#181B21", text="#E6E9EE", muted="#98A2B3", line="#2A2F38",
+             accent="#5B8DEF", on_accent="#FFFFFF", soft="#1B2536", warn="#FB923C", ok="#4ADE80"),
+    ),
     "toss": (
         dict(bg="#F2F4F6", card="#FFFFFF", text="#191F28", muted="#6B7684", line="#E5E8EB",
-             accent="#3182F6", on_accent="#FFFFFF", soft="#E8F3FF", warn="#F04452",
+             accent="#3182F6", on_accent="#FFFFFF", soft="#E8F3FF", warn="#F04452", ok="#15803D",
              radius="20px", btn_radius="14px", border="0px solid transparent",
              font=_SANS, num=_SANS, brand=_SANS, h1="32px", h1_weight="700", btn_h="54px"),
         dict(bg="#101013", card="#1D1D22", text="#EDEDF0", muted="#9E9EA7", line="#2C2C33",
-             accent="#3182F6", on_accent="#FFFFFF", soft="#1B2A40", warn="#FF6B76"),
+             accent="#3182F6", on_accent="#FFFFFF", soft="#1B2A40", warn="#FF6B76", ok="#4ADE80"),
     ),
     "minimal": (
         dict(bg="#FFFFFF", card="#FFFFFF", text="#37352F", muted="#787774", line="#E9E9E7",
-             accent="#2F2F2D", on_accent="#FFFFFF", soft="#F7F7F5", warn="#D44C47",
+             accent="#2F2F2D", on_accent="#FFFFFF", soft="#F7F7F5", warn="#D44C47", ok="#2F7D4F",
              radius="10px", btn_radius="8px", border="1px solid var(--rc-line)",
              font=_SANS, num=_SANS, brand=_SANS, h1="28px", h1_weight="600", btn_h="46px"),
         dict(bg="#191919", card="#191919", text="#E6E6E4", muted="#9B9A97", line="#2F2F2F",
-             accent="#E6E6E4", on_accent="#191919", soft="#252525", warn="#FF7369"),
+             accent="#E6E6E4", on_accent="#191919", soft="#252525", warn="#FF7369", ok="#6CC38E"),
     ),
     "receipt": (
         dict(bg="#E7E3DA", card="#FFFDF7", text="#1C1B19", muted="#78746B", line="#CBC5B8",
-             accent="#1C1B19", on_accent="#FFFDF7", soft="#F4F0E6", warn="#C2410C",
+             accent="#1C1B19", on_accent="#FFFDF7", soft="#F4F0E6", warn="#C2410C", ok="#15803D",
              radius="4px", btn_radius="4px", border="1.5px dashed var(--rc-line)",
              font=_SANS, num=_MONO, brand=_MONO, h1="28px", h1_weight="700", btn_h="50px"),
         dict(bg="#121211", card="#1C1B19", text="#EDE9E0", muted="#A29D92", line="#45423B",
-             accent="#EDE9E0", on_accent="#121211", soft="#26241F", warn="#FB923C"),
+             accent="#EDE9E0", on_accent="#121211", soft="#26241F", warn="#FB923C", ok="#4ADE80"),
     ),
 }
 
@@ -58,8 +67,8 @@ def current_theme() -> str:
         q = str(st.query_params.get("theme", "")).lower()
     except Exception:  # noqa: BLE001
         q = ""
-    name = q or os.getenv("UI_THEME", "toss").lower()
-    return name if name in THEMES else "toss"
+    name = q or os.getenv("UI_THEME", "team").lower()
+    return name if name in THEMES else "team"
 
 
 def _vars(d: dict) -> str:
@@ -152,9 +161,43 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 
 /* 펼치기 */
 .stApp [data-testid="stExpander"] details {{
-  border: 1px solid var(--rc-line); border-radius: var(--rc-btn-radius); background: transparent;
+  border: 1px solid var(--rc-line); border-radius: var(--rc-radius); background: var(--rc-card);
 }}
-.stApp [data-testid="stExpander"] summary p {{ font-size: 14px; color: var(--rc-muted); font-weight: 500; }}
+.stApp [data-testid="stExpander"] summary p {{ font-size: 14px; color: var(--rc-text); font-weight: 600; }}
+
+/* 누를 때·고를 때 반응 */
+.stApp [data-testid="stFileUploaderDropzone"] {{ transition: border-color .15s ease, background .15s ease; }}
+.stApp [data-testid="stFileUploaderDropzone"]:hover {{ border-color: var(--rc-accent); }}
+.stApp [data-testid="stTextInputRootElement"]:focus-within,
+.stApp [data-baseweb="select"] > div:focus-within,
+.stApp [data-testid="stTextArea"] [data-baseweb="textarea"]:focus-within {{
+  border-color: var(--rc-accent) !important; box-shadow: 0 0 0 3px var(--rc-soft);
+}}
+.stApp button:focus-visible, .stApp a:focus-visible, .stApp summary:focus-visible {{
+  outline: 3px solid var(--rc-accent); outline-offset: 2px;
+}}
+.stApp button[data-testid^="stBaseButton-secondary"]:hover, .stApp [data-testid="stPopover"] button:hover {{
+  border-color: var(--rc-accent); color: var(--rc-accent);
+}}
+.stApp [data-testid="stImage"] img {{ border: 1px solid var(--rc-line); border-radius: var(--rc-radius); }}
+.stApp [data-testid="stMarkdownContainer"] p, .stApp [data-testid="stMarkdownContainer"] li {{ line-height: 1.65; }}
+.stApp [data-testid="stAlert"] {{ border-radius: var(--rc-radius); }}
+
+/* 단계 안내 */
+.rc-steps {{ display: flex; gap: 8px; margin: 14px 0 6px; }}
+.rc-step {{ flex: 1 1 0; min-width: 0; display: flex; gap: 10px; align-items: center;
+  background: var(--rc-card); border: 1px solid var(--rc-line); border-radius: var(--rc-radius);
+  padding: 10px 12px; color: var(--rc-muted); }}
+.rc-step .n {{ flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-weight: 800; font-size: 13px; background: var(--rc-bg); color: var(--rc-muted); }}
+.rc-step b {{ display: block; font-size: 14px; font-weight: 700; color: var(--rc-muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }}
+.rc-step small {{ display: block; font-size: 12px; color: var(--rc-muted); line-height: 1.4; }}
+.rc-step.active {{ border-color: var(--rc-accent); }}
+.rc-step.active .n {{ background: var(--rc-accent); color: var(--rc-on-accent); }}
+.rc-step.active b {{ color: var(--rc-text); }}
+.rc-step.done .n {{ background: var(--rc-soft); color: var(--rc-accent); }}
+.rc-step.done b {{ color: var(--rc-text); }}
 
 /* 한 줄 고정: 휴대폰에서도 칸이 아래로 떨어지지 않게 (키가 row 로 시작하는 묶음) */
 [class*="st-key-row"] [data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: 10px; }}
@@ -195,7 +238,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .rc-banner b {{ display: block; font-size: 16px; color: var(--rc-text); }}
 .rc-banner span {{ font-size: 13px; color: var(--rc-muted); }}
 .rc-banner.ok {{ background: var(--rc-card); border-radius: var(--rc-radius); padding: 14px 18px;
-  border-left: 4px solid var(--rc-accent); }}
+  border: var(--rc-border); border-left: 4px solid var(--rc-ok); }}
 
 /* 영수증 카드 목록 */
 .st-key-receipt_list {{ gap: 8px; }}
@@ -210,10 +253,10 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
   align-items: center; flex-wrap: wrap; }}
 .rc-badge {{ font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }}
 .rc-badge.pending {{ color: var(--rc-warn); background: var(--rc-soft); }}
-.rc-badge.done {{ color: var(--rc-accent); background: var(--rc-soft); }}
+.rc-badge.done {{ color: var(--rc-ok); background: var(--rc-soft); }}
 @supports (background: color-mix(in srgb, red 10%, transparent)) {{
 .rc-badge.pending {{ background: color-mix(in srgb, var(--rc-warn) 12%, transparent); }}
-.rc-badge.done {{ background: color-mix(in srgb, var(--rc-accent) 12%, transparent); }}
+.rc-badge.done {{ background: color-mix(in srgb, var(--rc-ok) 12%, transparent); }}
 }}
 .rc-row-reason {{ font-size: 12.5px; color: var(--rc-muted); margin: 6px 0 2px; line-height: 1.5;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
@@ -237,6 +280,21 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
   .stApp [data-testid="stFileUploaderDropzone"] {{ padding: 14px 12px; }}
   div[role="dialog"] {{ width: 100vw !important; max-width: 100vw !important; margin: 0 !important;
     border-radius: 16px 16px 0 0 !important; }}
+  /* 아이폰: 16px보다 작은 입력칸을 누르면 화면을 확대한다 */
+  .stApp input, .stApp textarea {{ font-size: 16px !important; }}
+  /* 손가락으로 누르기 쉬운 크기 */
+  .stApp button[data-testid^="stBaseButton"], .stApp [data-testid="stPopover"] button {{ min-height: 48px; }}
+  [class*="st-key-rowc_"] button {{ min-height: 40px !important; }}
+  .stApp [data-testid="stFileUploaderDropzone"] button {{ width: 100%; }}
+  /* 아이폰 아래쪽 홈 막대만큼 여백 */
+  [data-testid="stMainBlockContainer"] {{ padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }}
+  /* 단계 안내: 설명 숨기고 한 줄 3칸 */
+  .rc-steps {{ gap: 6px; margin: 8px 0 2px; }}
+  .rc-step {{ flex-direction: column; gap: 4px; padding: 8px 4px; text-align: center; }}
+  .rc-step small {{ display: none; }}
+  .rc-step b {{ font-size: 12px; }}
+  /* 좁은 화면에서 보기 필터가 넘치면 옆으로 밀기 */
+  .stApp [data-testid="stButtonGroup"] {{ overflow-x: auto; scrollbar-width: none; }}
 }}
 
 /* 결과 요약 */
@@ -250,6 +308,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .rc-stats {{ display: flex; gap: 18px; font-size: 14px; color: var(--rc-muted); }}
 .rc-stats b {{ display: block; font-family: var(--rc-num); font-size: 20px; color: var(--rc-text); }}
 .rc-stats .warn b {{ color: var(--rc-warn); }}
+.rc-stats .ok b {{ color: var(--rc-ok); }}
 .rc-meta {{ font-size: 13px; color: var(--rc-muted); margin-bottom: 6px; }}
 """
     if name == "receipt":
@@ -273,6 +332,11 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .rc-total small, .rc-stats { font-family: var(--rc-num); text-transform: uppercase; font-size: 12px;
   letter-spacing: 0.06em; }
 .stApp [data-testid="stFileUploaderDropzone"] { background: transparent; }
+"""
+    if name == "team":
+        css += """
+.st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card,
+[class*="st-key-rowc_"] { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
 """
     if name == "toss":
         css += """

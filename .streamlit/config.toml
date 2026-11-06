@@ -3,13 +3,13 @@
 # 색은 항상 [theme.light] / [theme.dark] 양쪽에 나눠 넣는다.
 
 [theme.light]
-primaryColor = "#2563EB"
-backgroundColor = "#F3F4F6"
+primaryColor = "#2F6FED"
+backgroundColor = "#F6F7F9"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#111827"
+textColor = "#17202B"
 
 [theme.dark]
-primaryColor = "#60A5FA"
-backgroundColor = "#0E1117"
-secondaryBackgroundColor = "#1A1D24"
-textColor = "#F3F4F6"
+primaryColor = "#5B8DEF"
+backgroundColor = "#0F1115"
+secondaryBackgroundColor = "#11141A"
+textColor = "#E6E9EE"

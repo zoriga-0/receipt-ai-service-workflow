@@ -60,6 +60,26 @@ def money(v, currency="KRW") -> str:
     return f"{currency} {v:,.2f}"
 
 
+STEPS = [
+    ("영수증 업로드", "사진·PDF를 여러 장 올려요"),
+    ("분석 · 검토", "검토 필요 건을 사진과 비교해 고쳐요"),
+    ("엑셀 내보내기", "파일로 받거나 드라이브에 저장해요"),
+]
+
+
+def render_steps(slot, current: int) -> None:
+    """맨 위 단계 안내. current: 지금 단계(1~3). 앞 단계는 완료로 표시한다."""
+    items = []
+    for i, (title, desc) in enumerate(STEPS, start=1):
+        cls = "active" if i == current else ("done" if i < current else "")
+        num = "✓" if i < current else str(i)
+        items.append(
+            f'<div class="rc-step {cls}"><span class="n">{num}</span>'
+            f"<div><b>{title}</b><small>{desc}</small></div></div>"
+        )
+    slot.markdown('<div class="rc-steps">' + "".join(items) + "</div>", unsafe_allow_html=True)
+
+
 @st.cache_data(show_spinner=False, max_entries=200)
 def cached_preview(name: str, data: bytes):
     return make_preview(name, data)
@@ -203,8 +223,10 @@ def previous_panel(n_files: int):
 ##################################################
 
 work = st.session_state.get("work")
+steps_slot = st.empty()  # 단계 안내 (결과 화면에서는 검토가 끝났는지 보고 아래에서 채운다)
 summary_slot = None
 if not work:
+    render_steps(steps_slot, 1)
     st.markdown(
         '<div class="rc-hero">영수증 사진을 올리면<br><span>정산용 엑셀로 정리해 드려요</span></div>',
         unsafe_allow_html=True,
@@ -479,6 +501,7 @@ if work:
 
     n_pending = int((edited["검토여부"] == "검토 필요").sum())
     n_done = int((edited["검토여부"] == "검토 완료").sum())
+    render_steps(steps_slot, 2 if n_pending else 3)
 
     # ---------- 합계 카드 ----------
     with summary_slot:
@@ -503,7 +526,7 @@ if work:
             + '<div class="rc-stats">'
             + f"<div>영수증<b>{len(edited)}</b></div>"
             + f'<div class="{"warn" if n_pending else ""}">검토 필요<b>{n_pending}</b></div>'
-            + f"<div>검토 완료<b>{n_done}</b></div></div>"
+            + f'<div class="{"ok" if n_done else ""}">검토 완료<b>{n_done}</b></div></div>'
             + (f'<div class="rc-meta">{html.escape(" · ".join(info))}</div>' if info else ""),
             unsafe_allow_html=True,
         )
