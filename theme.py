@@ -78,7 +78,9 @@ def apply_theme(name: str | None = None) -> str:
 /* 기본: Streamlit 메뉴·장식 숨기기, 당겨서 새로고침 막기 */
 #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] {{ visibility: hidden; }}
 header[data-testid="stHeader"] {{ background: transparent; }}
-html, body {{ overscroll-behavior-y: none; }}
+html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{ overscroll-behavior-y: contain; }}
+html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
+.stApp button, .stApp a, .stApp summary {{ -webkit-tap-highlight-color: transparent; touch-action: manipulation; }}
 
 .stApp {{ background: var(--rc-bg); color: var(--rc-text); }}
 .stApp, .stApp p, .stApp label, .stApp li, .stApp input, .stApp textarea, .stApp button,
@@ -138,7 +140,7 @@ html, body {{ overscroll-behavior-y: none; }}
   content: "엑셀(.xlsx)·CSV"; font-size: 13px; color: var(--rc-muted);
 }}
 .stApp [class*="st-key-files_"] [data-testid="stFileUploaderDropzoneInstructions"] span::after {{
-  content: "사진·PDF·아이폰 HEIC · 여러 장 한 번에";
+  content: "사진·PDF · 여러 장 한 번에";
 }}
 
 /* 탭 */
@@ -158,7 +160,26 @@ html, body {{ overscroll-behavior-y: none; }}
 [class*="st-key-row"] [data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: 10px; }}
 [class*="st-key-row"] [data-testid="stColumn"] {{ min-width: 0 !important; width: auto !important; }}
 
-.st-key-row_cats {{ margin-bottom: 4px; }}
+/* 경비 구분: 입력칸처럼 보이는 버튼 */
+.rc-field-label {{ font-size: 14px; line-height: 1.6; color: var(--rc-text); margin: 4px 0 0; }}
+.rc-field-label span {{ font-size: 12px; color: var(--rc-muted); margin-left: 6px; }}
+.st-key-cats_field {{ margin-bottom: 6px; }}
+.stApp .st-key-cats_field [data-testid="stPopover"] button {{
+  background: var(--rc-card); border: 1px solid var(--rc-line); border-radius: var(--rc-btn-radius);
+  min-height: 42px; padding: 0 14px; font-weight: 400; color: var(--rc-muted);
+}}
+.stApp .st-key-cats_field [data-testid="stPopover"] button > div {{
+  width: 100%; justify-content: space-between;
+}}
+.stApp .st-key-cats_field [data-testid="stPopover"] button > div > div:first-child {{
+  justify-content: flex-start; min-width: 0;
+}}
+.stApp .st-key-cats_field [data-testid="stPopover"] button > div > div:first-child span {{
+  justify-content: flex-start; min-width: 0;
+}}
+.stApp .st-key-cats_field [data-testid="stPopover"] button p {{
+  font-size: 15px; color: var(--rc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
 .stApp [data-testid="stButtonGroup"] {{ margin-top: 4px; }}
 .rc-sub {{ font-size: 14px; font-weight: 700; color: var(--rc-text); margin: 14px 0 2px; }}
 
@@ -188,8 +209,12 @@ html, body {{ overscroll-behavior-y: none; }}
 .rc-row-sub {{ font-size: 13px; color: var(--rc-muted); margin-top: 2px; display: flex; gap: 8px;
   align-items: center; flex-wrap: wrap; }}
 .rc-badge {{ font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }}
-.rc-badge.pending {{ color: var(--rc-warn); background: color-mix(in srgb, var(--rc-warn) 12%, transparent); }}
-.rc-badge.done {{ color: var(--rc-accent); background: color-mix(in srgb, var(--rc-accent) 12%, transparent); }}
+.rc-badge.pending {{ color: var(--rc-warn); background: var(--rc-soft); }}
+.rc-badge.done {{ color: var(--rc-accent); background: var(--rc-soft); }}
+@supports (background: color-mix(in srgb, red 10%, transparent)) {{
+.rc-badge.pending {{ background: color-mix(in srgb, var(--rc-warn) 12%, transparent); }}
+.rc-badge.done {{ background: color-mix(in srgb, var(--rc-accent) 12%, transparent); }}
+}}
 .rc-row-reason {{ font-size: 12.5px; color: var(--rc-muted); margin: 6px 0 2px; line-height: 1.5;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
 [class*="st-key-rowc_"] button {{ min-height: 36px; padding: 0 10px; font-size: 13px; }}
@@ -204,6 +229,7 @@ html, body {{ overscroll-behavior-y: none; }}
 
 /* 휴대폰 */
 @media (max-width: 640px) {{
+  [data-testid="stPopoverBody"] {{ max-width: calc(100vw - 24px) !important; }}
   [data-testid="stMainBlockContainer"] {{ padding: 1rem 0.9rem 4rem; }}
   .rc-hero {{ font-size: calc(var(--rc-h1) * 0.82); margin: 18px 0 16px; }}
   .st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{ padding: 16px 14px; }}

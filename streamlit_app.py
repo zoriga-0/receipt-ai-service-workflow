@@ -25,7 +25,7 @@ from excel_builder import (
     dataframe_to_excel_bytes,
     resolve_headers,
 )
-from media import build_zip, evidence_filename, make_preview, prepare_upload
+from media import UPLOAD_TYPES, build_zip, evidence_filename, make_preview, prepare_upload
 from normalize import (
     CATEGORIES,
     CATEGORY_PRESETS,
@@ -45,7 +45,7 @@ st.set_page_config(page_title="영수증 콜렉터", page_icon="🧾", layout="w
 apply_theme()  # 디자인 (theme.py)
 
 CURRENCIES = ["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]
-FILE_TYPES = ["png", "jpg", "jpeg", "pdf", "heic", "heif"]
+FILE_TYPES = UPLOAD_TYPES  # 사진·PDF·아이폰 HEIC·안드로이드 WEBP
 
 
 def text(v) -> str:
@@ -149,24 +149,21 @@ def input_panel(adding: bool):
         help="이번에 올린 영수증 전체에 적용돼요. 목적이 다르면 나눠서 올려 주세요.",
     ).strip()
 
-    # 경비 구분: 칩으로 보여주고 '바꾸기'에서 고친다
+    # 경비 구분: 입력칸처럼 생긴 버튼에 지금 목록을 보여주고, 누르면 고칠 수 있다
     preset = st.session_state.get("cat_preset", list(CATEGORY_PRESETS)[0])
     cats = parse_categories(st.session_state.get(f"cat_text_{preset}", ", ".join(CATEGORY_PRESETS[preset])))
-    with st.container(key="row_cats"):
-        c_l, c_r = st.columns([2.6, 1.1], vertical_alignment="center")
-        c_l.markdown(
-            '<div class="rc-chips"><span class="rc-chips-label">경비 구분</span>'
-            + "".join(f'<span class="rc-chip">{html.escape(c)}</span>' for c in cats)
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-        with c_r.popover("바꾸기", width="stretch"):
-            preset = st.selectbox("기본 목록", list(CATEGORY_PRESETS), key="cat_preset")
+    st.markdown('<div class="rc-field-label">경비 구분 <span>눌러서 바꾸기</span></div>', unsafe_allow_html=True)
+    with st.container(key="cats_field"):
+        with st.popover(" · ".join(cats), width="stretch"):
+            preset = st.selectbox(
+                "기본 목록", list(CATEGORY_PRESETS), key="cat_preset",
+                help="학생회·동아리, 회사용 목록도 있어요.",
+            )
             st.text_input(
-                "구분 목록",
+                "구분 목록 (쉼표로 나눠 적기)",
                 value=", ".join(CATEGORY_PRESETS[preset]),
                 key=f"cat_text_{preset}",
-                help="쉼표로 나눠 고칠 수 있어요. '기타'는 항상 들어가요.",
+                help="'기타'는 항상 들어가요.",
             )
     categories = parse_categories(
         st.session_state.get(f"cat_text_{preset}", ", ".join(CATEGORY_PRESETS[preset]))
@@ -371,7 +368,10 @@ def edit_dialog(idx, review_mode: bool):
     else:
         st.caption("원본 사진이 없는 행이에요. (지난 기록에서 불러왔거나 직접 추가한 행)")
     if text(row["사유"]):
-        st.warning(text(row["사유"]))
+        if text(row["검토여부"]) == "검토 필요":
+            st.warning(text(row["사유"]))
+        else:
+            st.caption("AI 판단: " + text(row["사유"]))
 
     cats = list(w.get("categories") or CATEGORIES)
     cats += [c for c in [text(row["경비구분"])] if c and c not in cats]

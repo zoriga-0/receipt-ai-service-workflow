@@ -10,32 +10,71 @@ import re
 import zipfile
 
 HEIC_EXT = (".heic", ".heif")
+# 화면에서 받는 파일 형식 (안드로이드에서 자주 나오는 webp 포함)
+UPLOAD_TYPES = ["png", "jpg", "jpeg", "webp", "pdf", "heic", "heif"]
+MAX_SIDE = 3500             # 이보다 큰 사진은 줄인다 (요즘 폰 카메라는 4000~8000px)
+MAX_BYTES = 6 * 1024 * 1024  # 이보다 큰 사진은 다시 저장한다 (삼성 '모션 포토'는 영상이 붙어 커진다)
 
 
 def file_hash(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
+def _stem(name: str) -> str:
+    return name.rsplit(".", 1)[0] if "." in name else name
+
+
 def prepare_upload(name: str, data: bytes) -> tuple[str, bytes, str]:
     """
-    업로드 파일을 분석 가능한 형식으로 바꾼다.
-    HEIC → JPG 변환. 반환: (파일명, 바이트, 오류메시지)
+    업로드 파일을 분석하기 좋은 JPG/PNG로 맞춘다. 반환: (파일명, 바이트, 오류메시지)
+      - 아이폰 HEIC, 안드로이드 WEBP → JPG
+      - 옆으로 누운 사진(EXIF 회전 정보만 있는 사진, 안드로이드에 많음) → 똑바로 세워서 저장
+      - 너무 큰 사진 → 긴 변 3500px로 줄여서 저장
+      - PDF와 이미 괜찮은 JPG/PNG는 그대로 둔다
     """
-    if not name.lower().endswith(HEIC_EXT):
+    lower = name.lower()
+    if lower.endswith(".pdf") or data[:5] == b"%PDF-":
         return name, data, ""
     try:
         from PIL import Image, ImageOps
-        from pillow_heif import register_heif_opener
-
-        register_heif_opener()
-        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-        out = io.BytesIO()
-        img.save(out, "JPEG", quality=92)
-        return name.rsplit(".", 1)[0] + ".jpg", out.getvalue(), ""
     except ImportError:
-        return name, data, f"{name}: HEIC 변환 패키지(pillow-heif)가 설치되어 있지 않습니다."
+        return name, data, ""
+    try:
+        if lower.endswith(HEIC_EXT):
+            from pillow_heif import register_heif_opener
+
+            register_heif_opener()
+        img = Image.open(io.BytesIO(data))
+        fmt = (img.format or "").upper()
+        try:
+            orientation = img.getexif().get(0x0112, 1)
+        except Exception:  # noqa: BLE001
+            orientation = 1
+        needs = (
+            fmt not in ("JPEG", "PNG")
+            or orientation not in (None, 1)
+            or max(img.size) > MAX_SIDE
+            or len(data) > MAX_BYTES
+        )
+        if not needs:
+            return name, data, ""
+        img = ImageOps.exif_transpose(img)
+        if fmt == "PNG" and img.mode in ("RGBA", "LA", "P"):
+            # 투명 배경 스크린샷은 흰 바탕으로
+            bg = Image.new("RGB", img.size, "white")
+            bg.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+            img = bg
+        img = img.convert("RGB")
+        img.thumbnail((MAX_SIDE, MAX_SIDE))
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=90)
+        return _stem(name) + ".jpg", out.getvalue(), ""
+    except ImportError:
+        return name, data, f"{name}: HEIC 변환 패키지(pillow-heif)가 설치되어 있지 않아요."
     except Exception as e:  # noqa: BLE001
-        return name, data, f"{name}: HEIC 사진을 변환하지 못했습니다 ({e})"
+        if lower.endswith((".jpg", ".jpeg", ".png")):
+            return name, data, ""  # 읽기만 실패한 일반 사진은 그대로 보내 본다
+        return name, data, f"{name}: 사진 파일을 읽지 못했어요 ({type(e).__name__})"
 
 
 def make_preview(name: str, data: bytes, max_side: int = 1600) -> bytes | None:
