@@ -92,8 +92,11 @@ def gate() -> dict:
     if st.session_state.get("authed") or not (use_google or config.APP_PASSWORD):
         return {}
 
-    _, mid, _ = st.columns([1, 1.2, 1])
-    with mid:
+    st.markdown(
+        '<div class="rc-hero">영수증 사진을 올리면<br><span>정산용 엑셀로 정리해 드려요</span></div>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key="login_card"):
         if use_google:
             st.button("Google 계정으로 로그인", type="primary", width="stretch",
                       on_click=st.login, args=(PROVIDER,))

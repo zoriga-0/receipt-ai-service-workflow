@@ -25,24 +25,15 @@ from normalize import (
 from records import add_quarter, detect_duplicates, read_previous_file
 from api_client import run_via_api, server_status
 from service import process_receipts
+from session_keep import restore, sync
+from theme import apply_theme
 from ui_extras import AnalysisProgress, is_production, leave_guard
 
 st.set_page_config(page_title="영수증 콜렉터", page_icon="🧾", layout="wide")
+apply_theme()  # 디자인 (theme.py)
 
-# 앱처럼 보이게: Streamlit 메뉴·상단 장식 숨기기
-st.markdown(
-    """
-    <style>
-    #MainMenu, footer,
-    [data-testid="stToolbar"], [data-testid="stDecoration"] {visibility: hidden;}
-    header[data-testid="stHeader"] {background: transparent;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-head_left, head_right = st.columns([5, 1], vertical_alignment="bottom")
-head_left.title("🧾 영수증 콜렉터")
+head_left, head_right = st.columns([4, 1], vertical_alignment="center")
+head_left.markdown('<div class="rc-brand">영수증 콜렉터</div>', unsafe_allow_html=True)
 
 # 들어오는 문: 구글 로그인(+비상용 비밀번호). 주소를 아는 누구나 Upstage 사용량을 쓰지 못하게 막는다
 user = gate()
@@ -61,7 +52,7 @@ if user.get("email"):
             st.session_state.drive_folder = (user["email"], drive_folder)
         except DriveError as e:
             drive_msg = str(e)
-    with head_right.popover(user.get("name") or user["email"], width="stretch"):
+    with head_right.popover(user.get("name") or user["email"], width="stretch", icon=":material/person:"):
         st.caption(user["email"])
         if drive_folder:
             st.caption(f"저장 위치: 내 드라이브 / {FOLDER_NAME} / {RECORD_FILE}")
@@ -72,7 +63,10 @@ if user.get("email"):
             st.logout()
 drive_ready = bool(drive_folder)
 
-st.caption("영수증 사진만 올리면 정산용 엑셀이 나와요.")
+# 새로고침했으면 보관해 둔 분석 결과를 되살린다 (Mac 메모리, 1시간)
+owner = user.get("email", "")
+restore(owner)
+
 
 CURRENCIES = ["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]
 
@@ -110,44 +104,55 @@ if config.USE_MOCK and not PROD:
 # 업로드
 ##################################################
 
-uploaded_files = st.file_uploader(
-    "영수증 사진 올리기 (사진·PDF·아이폰 HEIC)",
-    type=["png", "jpg", "jpeg", "pdf", "heic", "heif"],
-    accept_multiple_files=True,
-)
-n_files = len(uploaded_files or [])
-
-# 지출 목적과 경비 구분 목록: 목적을 적거나 목록을 바꾸면 Solar가 목적에 맞게 다시 분류한다
-purpose = st.text_input(
-    "이번 영수증은 무엇을 위한 지출인가요? (선택)",
-    placeholder="예: 11월 MT 장보기, 동아리 정기 회의",
-    max_chars=100,
-).strip()
-st.caption("적은 목적은 이번에 올린 영수증 전체에 똑같이 적용돼요. 목적이 다른 영수증은 나눠서 분석해 주세요.")
-with st.expander("경비 구분 목록 바꾸기"):
-    preset = st.selectbox("기본 목록", list(CATEGORY_PRESETS), key="cat_preset")
-    cat_text = st.text_input(
-        "구분 목록 (쉼표로 나눠 고칠 수 있어요. '기타'는 항상 들어가요)",
-        value=", ".join(CATEGORY_PRESETS[preset]),
-        key=f"cat_text_{preset}",
+if not st.session_state.get("work"):
+    st.markdown(
+        '<div class="rc-hero">영수증 사진을 올리면<br><span>정산용 엑셀로 정리해 드려요</span></div>',
+        unsafe_allow_html=True,
     )
-categories = parse_categories(cat_text)
-st.caption("경비 구분: " + " · ".join(categories))
 
-# 버튼 1: 새 영수증만 분석
-run_new = st.button(
-    f"영수증 {n_files}장 분석하기" if n_files else "영수증을 올리면 분석할 수 있어요",
-    key="run_new",
-    type="primary",
-    disabled=not n_files or bool(missing),
-)
+with st.container(key="upload_card"):
+    uploaded_files = st.file_uploader(
+        "영수증 사진",
+        type=["png", "jpg", "jpeg", "pdf", "heic", "heif"],
+        accept_multiple_files=True,
+    )
+    n_files = len(uploaded_files or [])
+
+    # 지출 목적과 경비 구분 목록: 목적을 적거나 목록을 바꾸면 Solar가 목적에 맞게 다시 분류한다
+    p1, p2 = st.columns([3, 1.2], vertical_alignment="bottom")
+    purpose = p1.text_input(
+        "어디에 쓴 돈인가요? (선택)",
+        placeholder="예: 11월 MT 장보기",
+        max_chars=100,
+        help="적은 목적은 이번에 올린 영수증 전체에 적용돼요. 목적이 다른 영수증은 나눠서 분석해 주세요.",
+    ).strip()
+    with p2.popover("경비 구분", width="stretch", icon=":material/tune:"):
+        preset = st.selectbox("기본 목록", list(CATEGORY_PRESETS), key="cat_preset")
+        cat_text = st.text_input(
+            "구분 목록",
+            value=", ".join(CATEGORY_PRESETS[preset]),
+            key=f"cat_text_{preset}",
+            help="쉼표로 나눠 고칠 수 있어요. '기타'는 항상 들어가요.",
+        )
+        st.caption(" · ".join(parse_categories(cat_text)))
+    categories = parse_categories(cat_text)
+
+    # 버튼 1: 새 영수증만 분석
+    run_new = st.button(
+        f"영수증 {n_files}장 분석하기" if n_files else "분석하기",
+        key="run_new",
+        type="primary",
+        width="stretch",
+        disabled=not n_files or bool(missing),
+    )
+
 # 버튼 2: 지난 기록과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
 with st.expander("지난 기록에 이어서 정리하기"):
     use_drive = drive_ready and st.checkbox(
         f"내 구글 드라이브의 {RECORD_FILE} 불러오기", value=True, key="use_drive"
     )
     previous_xlsx = st.file_uploader(
-        "받아 두었던 엑셀·CSV 올리기" if drive_ready else "이 서비스에서 받았던 엑셀 또는 CSV",
+        "받아 두었던 엑셀·CSV" if drive_ready else "이 서비스에서 받았던 엑셀·CSV",
         type=["xlsx", "csv"],
     )
     has_prev = bool(previous_xlsx or use_drive)
@@ -156,10 +161,11 @@ with st.expander("지난 기록에 이어서 정리하기"):
     elif has_prev:
         merge_label = "지난 기록만 불러오기"
     else:
-        merge_label = "엑셀이나 CSV를 올리면 이어서 정리할 수 있어요"
+        merge_label = "지난 기록을 고르면 이어서 정리할 수 있어요"
     run_merge = st.button(
         merge_label,
         key="run_merge",
+        width="stretch",
         disabled=not has_prev or bool(missing and n_files),
     )
 
@@ -167,15 +173,18 @@ with st.expander("지난 기록에 이어서 정리하기"):
 upload_key = tuple((f.name, f.size) for f in (uploaded_files or [])) + (
     (previous_xlsx.name, previous_xlsx.size) if previous_xlsx else (),
 ) + (("drive",) if use_drive else ())
-if st.session_state.get("upload_key") != upload_key:
+if st.session_state.pop("restored", False):
+    # 새로고침으로 되살린 결과: 올린 파일 목록은 비어 있지만 결과는 지우지 않는다
+    st.session_state.upload_key = upload_key
+elif st.session_state.get("upload_key") != upload_key:
     st.session_state.upload_key = upload_key
     st.session_state.pop("work", None)
 
 
-
-# 파일을 올렸거나, 분석 중이거나, 결과가 있으면 새로고침·창 닫기 때 경고를 띄운다.
+# 올리기만 하고 아직 분석 결과가 없을 때(분석 중 포함) 새로고침·창 닫기 경고를 띄운다.
+# 분석 결과는 새로고침해도 되살아나므로 경고하지 않는다.
 # 분석 전에 그려야 분석이 도는 동안에도 켜져 있다.
-leave_guard(bool(n_files or previous_xlsx or st.session_state.get("work")))
+leave_guard(bool(n_files or previous_xlsx) and not st.session_state.get("work"))
 
 if (run_new or run_merge) and config.API_URL and n_files:
     # 서버를 쓰는 설정이면, 분석 전에 서버가 켜져 있는지 먼저 확인한다
@@ -263,11 +272,11 @@ if run_new or run_merge:
 ##################################################
 
 work = st.session_state.get("work")
+sync(owner)
 if work:
     df, details, originals, ver = work["df"], work["details"], work["originals"], work["ver"]
 
-    st.divider()
-    st.subheader("분석 결과")
+    st.markdown('<div class="rc-section">분석 결과</div>', unsafe_allow_html=True)
     # 요약 숫자는 표에서 고친 값까지 반영해야 해서, 자리만 먼저 잡고 아래에서 채운다
     summary_slot = st.container()
 
@@ -281,28 +290,28 @@ if work:
         st.warning(f"날짜·상호·금액이 같은 중복 의심 영수증이 {work['dup_count']}건 있어요.")
     info = []
     if work["prev_count"]:
-        info.append(
-            f"지난 기록 {work['prev_count']}건({', '.join(work.get('prev_notes') or [])})을 불러와 합쳤어요"
-        )
+        info.append(f"지난 기록 {work['prev_count']}건 포함 ({', '.join(work.get('prev_notes') or [])})")
     if work.get("elapsed") and work.get("n_new"):
         info.append(
-            f"분석 시간 {work['elapsed']:.0f}초 (영수증 {work['n_new']}장, "
-            f"장당 평균 {work['elapsed'] / work['n_new']:.1f}초)"
+            f"새 영수증 {work['n_new']}장 · {work['elapsed']:.0f}초 (장당 {work['elapsed'] / work['n_new']:.1f}초)"
         )
-    if info:
-        st.caption(" · ".join(info))
 
     currency_options = sorted(set(CURRENCIES) | {c for c in df["통화"].dropna() if c})
     # 경비 구분 선택지: 분석할 때 정한 목록 + 이전 기록에만 있던 구분
     cat_options = list(work.get("categories") or CATEGORIES)
     cat_options += sorted({c for c in df["경비구분"].dropna() if c and c not in cat_options})
 
-    tab_review, tab_all, tab_export = st.tabs(["검토 필요", "전체 결과", "내보내기"])
+    # 탭 이름의 건수는 직전 화면 기준 (표에서 고치면 다음 화면에 반영)
+    base = work.get("latest") if work.get("latest") is not None else df
+    n_review = int((base["검토여부"] == "검토 필요").sum())
+    tab_review, tab_all, tab_export = st.tabs(
+        [f"검토 필요 {n_review}" if n_review else "검토 필요", f"전체 {len(base)}", "내보내기"]
+    )
 
     # ---------- 전체 결과 (직접 수정) ----------
     # 다른 탭과 요약 숫자가 이 표의 최신 값을 써야 하므로 코드는 이 탭을 먼저 실행한다.
     with tab_all:
-        st.caption("셀을 더블클릭해 고칠 수 있어요. 맨 아래 빈 줄에서 행을 추가하고, 왼쪽 체크박스로 삭제해요.")
+        st.caption("칸을 두 번 눌러 고쳐요. 맨 아래 빈 줄에 행을 추가할 수 있어요.")
         edited = st.data_editor(
             df,
             key=f"editor_{ver}",
@@ -328,16 +337,30 @@ if work:
         )
         edited = add_quarter(edited.reset_index(drop=True))
         edited["결제금액"] = pd.to_numeric(edited["결제금액"], errors="coerce")
+        work["latest"] = edited.reindex(columns=COLUMNS + ["_id"])  # 새로고침 뒤 되살릴 값
 
     # ---------- 요약 (맨 위 자리에 채우기) ----------
     n_pending = int((edited["검토여부"] == "검토 필요").sum())
     with summary_slot:
-        m1, m2, m3, m4 = st.columns([1, 1, 1, 1.5])  # 합계 금액이 잘리지 않게 넓게
-        m1.metric("영수증", f"{len(edited)}장", border=True)
-        m2.metric("검토 필요", f"{n_pending}건", border=True)
-        m3.metric("검토 완료", f"{int((edited['검토여부'] == '검토 완료').sum())}건", border=True)
         krw = edited.loc[edited["통화"] == "KRW", "결제금액"].sum()
-        m4.metric("합계 (KRW)", f"{krw:,.0f}원", border=True)
+        others = (
+            edited[(edited["통화"] != "KRW") & edited["통화"].notna() & (edited["통화"] != "")]
+            .groupby("통화")["결제금액"].sum()
+        )
+        other_txt = " · ".join(f"{c} {v:,.2f}" for c, v in others.items() if v)
+        n_done = int((edited["검토여부"] == "검토 완료").sum())
+        st.markdown(
+            f'''<div class="rc-summary">
+<div class="rc-total"><small>합계</small><b>{krw:,.0f}원</b>{f"<em>+ {other_txt}</em>" if other_txt else ""}</div>
+<div class="rc-stats">
+<div>영수증<b>{len(edited)}</b></div>
+<div class="{"warn" if n_pending else ""}">검토 필요<b>{n_pending}</b></div>
+<div>검토 완료<b>{n_done}</b></div>
+</div>
+</div>'''
+            + (f'<div class="rc-meta">{" · ".join(info)}</div>' if info else ""),
+            unsafe_allow_html=True,
+        )
 
     # ---------- 검토 필요 (사진 보며 수정) ----------
     with tab_review:
@@ -455,7 +478,7 @@ if work:
                 width="stretch",
             )
 
-        with st.expander("세부 설정 · 넣을 컬럼과 순서·이름, 집계 시트, 증빙 사진 zip"):
+        with st.expander("파일 세부 설정 (컬럼·집계 시트·증빙 사진)"):
             # (1) 컬럼: 넣을지, 순서, 파일에 표시할 이름을 표 하나에서 정한다
             st.caption("넣지 않을 컬럼은 체크를 끄고, 순서는 숫자로, 이름은 오른쪽 칸을 더블클릭해 바꾸세요.")
             col_df = st.data_editor(

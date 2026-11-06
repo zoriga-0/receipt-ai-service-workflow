@@ -42,21 +42,25 @@ def leave_guard(active: bool) -> None:
     """
     active=True: 새로고침·창 닫기·뒤로 가기 때 브라우저가 '나가시겠습니까?' 경고를 띄운다.
     active=False: 경고를 끈다.
-    문구는 브라우저가 정한다(보안상 직접 바꿀 수 없음).
+
+    - 경고 함수는 페이지 본문(window.parent)에 한 번만 심는다. 이 작은 iframe 안에서 만든 함수는
+      Streamlit이 iframe을 다시 그리면 동작하지 않아서, 켜고 끄는 값(__receiptGuardOn)만 여기서 바꾼다.
+    - 문구는 브라우저가 정한다(보안상 직접 바꿀 수 없음).
+    - 아이폰 사파리는 이 경고를 지원하지 않는다. 그래서 분석 결과는 session_keep으로 되살린다.
     """
     flag = "true" if active else "false"
     components.html(
         f"""<script>
 (function () {{
   const w = window.parent;
-  if (w.__receiptLeaveGuard) {{
-    w.removeEventListener('beforeunload', w.__receiptLeaveGuard);
-    w.__receiptLeaveGuard = null;
+  if (!w.__receiptGuardInstalled) {{
+    const s = w.document.createElement('script');
+    s.textContent = "window.addEventListener('beforeunload', function (e) {{" +
+      " if (window.__receiptGuardOn) {{ e.preventDefault(); e.returnValue = ''; return ''; }} }});";
+    w.document.head.appendChild(s);
+    w.__receiptGuardInstalled = true;
   }}
-  if ({flag}) {{
-    w.__receiptLeaveGuard = function (e) {{ e.preventDefault(); e.returnValue = ''; return ''; }};
-    w.addEventListener('beforeunload', w.__receiptLeaveGuard);
-  }}
+  w.__receiptGuardOn = {flag};
 }})();
 </script>""",
         height=0,
