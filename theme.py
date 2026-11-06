@@ -98,14 +98,23 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 }}
 .stApp [data-testid="stIconMaterial"] {{ font-family: 'Material Symbols Rounded' !important; letter-spacing: 0; }}
 [data-testid="stMainBlockContainer"] {{ max-width: 760px; padding-top: 1.6rem; padding-bottom: 5rem; }}
+/* 박스 사이 간격을 한 가지(12px)로 맞춘다 */
+.stApp [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {{ gap: 12px; }}
+.stApp .st-key-receipt_list {{ gap: 8px; }}
+.st-key-rc_hidden_style, .st-key-rc_hidden_guard {{ display: none !important; }}
+[data-testid="stLayoutWrapper"]:has(> .st-key-rc_hidden_style),
+[data-testid="stLayoutWrapper"]:has(> .st-key-rc_hidden_guard) {{ display: none !important; }}
+/* Streamlit 글 상자의 음수 아래 여백(-16px) 때문에 박스가 겹치던 것을 없앤다 */
+.stApp [data-testid="stMarkdownContainer"] {{ margin-bottom: 0 !important; }}
+.stApp [data-testid="stMarkdownContainer"] p:last-child {{ margin-bottom: 0; }}
 .stApp [data-testid="stCaptionContainer"], .stApp [data-testid="stCaptionContainer"] p {{ color: var(--rc-muted); }}
 
 /* 머리글 */
 .rc-brand {{ font-family: var(--rc-brand); font-weight: 700; font-size: 17px; color: var(--rc-text); }}
 .rc-hero {{ font-size: var(--rc-h1); font-weight: var(--rc-h1-weight); line-height: 1.3;
-  color: var(--rc-text); margin: 28px 0 22px; letter-spacing: -0.03em; }}
+  color: var(--rc-text); margin: 16px 0 8px; letter-spacing: -0.03em; }}
 .rc-hero span {{ color: var(--rc-muted); }}
-.rc-section {{ font-size: 20px; font-weight: 700; color: var(--rc-text); margin: 8px 0 4px; }}
+.rc-section {{ font-size: 20px; font-weight: 700; color: var(--rc-text); margin: 0; }}
 
 /* 카드 */
 .st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{
@@ -184,7 +193,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .stApp [data-testid="stAlert"] {{ border-radius: var(--rc-radius); }}
 
 /* 단계 안내 */
-.rc-steps {{ display: flex; gap: 8px; margin: 14px 0 6px; }}
+.rc-steps {{ display: flex; gap: 8px; margin: 4px 0 0; }}
 .rc-step {{ flex: 1 1 0; min-width: 0; display: flex; gap: 10px; align-items: center;
   background: var(--rc-card); border: 1px solid var(--rc-line); border-radius: var(--rc-radius);
   padding: 10px 12px; color: var(--rc-muted); }}
@@ -223,7 +232,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .stApp .st-key-cats_field [data-testid="stPopover"] button p {{
   font-size: 15px; color: var(--rc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
-.stApp [data-testid="stButtonGroup"] {{ margin-top: 4px; }}
+.stApp [data-testid="stButtonGroup"] {{ margin-top: 0; }}
 .rc-sub {{ font-size: 14px; font-weight: 700; color: var(--rc-text); margin: 14px 0 2px; }}
 
 /* 경비 구분 칩 */
@@ -237,7 +246,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
   padding: 16px 18px; border-left: 4px solid var(--rc-warn) !important; }}
 .rc-banner b {{ display: block; font-size: 16px; color: var(--rc-text); }}
 .rc-banner span {{ font-size: 13px; color: var(--rc-muted); }}
-.rc-banner.ok {{ background: var(--rc-card); border-radius: var(--rc-radius); padding: 14px 18px;
+.rc-banner.ok {{ background: var(--rc-card); border-radius: var(--rc-radius); padding: 16px 18px;
   border: var(--rc-border); border-left: 4px solid var(--rc-ok); }}
 
 /* 영수증 카드 목록 */
@@ -274,7 +283,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 @media (max-width: 640px) {{
   [data-testid="stPopoverBody"] {{ max-width: calc(100vw - 24px) !important; }}
   [data-testid="stMainBlockContainer"] {{ padding: 1rem 0.9rem 4rem; }}
-  .rc-hero {{ font-size: calc(var(--rc-h1) * 0.82); margin: 18px 0 16px; }}
+  .rc-hero {{ font-size: calc(var(--rc-h1) * 0.82); margin: 10px 0 4px; }}
   .st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{ padding: 16px 14px; }}
   .rc-total b {{ font-size: 30px; }}
   .stApp [data-testid="stFileUploaderDropzone"] {{ padding: 14px 12px; }}
@@ -289,7 +298,7 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
   /* 아이폰 아래쪽 홈 막대만큼 여백 */
   [data-testid="stMainBlockContainer"] {{ padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); }}
   /* 단계 안내: 설명 숨기고 한 줄 3칸 */
-  .rc-steps {{ gap: 6px; margin: 8px 0 2px; }}
+  .rc-steps {{ gap: 6px; margin: 0; }}
   .rc-step {{ flex-direction: column; gap: 4px; padding: 8px 4px; text-align: center; }}
   .rc-step small {{ display: none; }}
   .rc-step b {{ font-size: 12px; }}
@@ -342,5 +351,6 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
         css += """
 .st-key-upload_card, .st-key-result_card, .st-key-login_card { box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
 """
-    st.markdown(css + "\n</style>", unsafe_allow_html=True)
+    with st.container(key="rc_hidden_style"):  # 스타일만 넣는 칸: 화면 간격에 끼지 않게 숨긴다
+        st.markdown(css + "\n</style>", unsafe_allow_html=True)
     return name

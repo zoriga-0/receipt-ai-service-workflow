@@ -10,6 +10,8 @@ streamlit_app.py — 영수증 콜렉터 화면
 """
 
 import html
+import importlib
+import os
 import re
 
 import pandas as pd
@@ -38,11 +40,17 @@ from normalize import (
 from records import add_quarter, detect_duplicates, read_previous_file
 from service import process_receipts
 from session_keep import restore, sync
-from theme import apply_theme
+import theme
 from ui_extras import AnalysisProgress, is_production, leave_guard
 
 st.set_page_config(page_title="영수증 콜렉터", page_icon="🧾", layout="wide")
-apply_theme()  # 디자인 (theme.py)
+
+# 디자인 파일(theme.py)을 고치면 앱을 다시 켜지 않아도 바로 반영되게 한다 (CSS만 있는 파일이라 안전)
+_theme_mtime = os.path.getmtime(theme.__file__)
+if getattr(theme, "_loaded_mtime", None) != _theme_mtime:
+    theme = importlib.reload(theme)
+theme._loaded_mtime = _theme_mtime
+theme.apply_theme()
 
 CURRENCIES = ["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]
 FILE_TYPES = UPLOAD_TYPES  # 사진·PDF·아이폰 HEIC·안드로이드 WEBP
@@ -248,7 +256,8 @@ n_files = len(uploaded_files or [])
 
 # 올리기만 하고 아직 분석하지 않은 파일이 있으면 새로고침·창 닫기 때 경고한다.
 # (분석이 끝나면 올리기 칸을 비우므로 경고도 꺼진다. 분석 결과는 새로고침해도 되살아난다)
-leave_guard(bool(n_files or previous_file))
+with st.container(key="rc_hidden_guard"):  # 보이지 않는 칸: 화면 간격에 끼지 않게 숨긴다
+    leave_guard(bool(n_files or previous_file))
 
 ##################################################
 # 분석
@@ -380,13 +389,37 @@ def edit_dialog(idx, review_mode: bool):
         left = int((rows["검토여부"] == "검토 필요").sum())
         st.caption(f"검토 남은 영수증 {left}건")
 
-    if has_photo:
-        src_name, src_data = w["originals"][rid]
-        preview = cached_preview(src_name, src_data)
+    # 중복 의심이면 겹치는 영수증 사진을 옆에 같이 보여준다
+    dup = re.search(r"(?:중복 의심|동일 파일 중복 업로드): (.+?)(?:와 날짜| / |$)", text(row["사유"]))
+    dup_name = dup.group(1).strip() if dup else ""
+    dup_photo = None
+    if dup_name:
+        same = rows[(rows["파일명"] == dup_name) & (rows.index != idx)]
+        for _, other in same.iterrows():
+            oid = other.get("_id")
+            if isinstance(oid, str) and oid in w["originals"]:
+                dup_photo = w["originals"][oid]
+                break
+
+    def show_photo(target, item, caption):
+        name_, data_ = item
+        preview = cached_preview(name_, data_)
         if preview:
-            st.image(preview, caption=src_name)
+            target.image(preview, caption=caption)
         else:
-            st.download_button("원본 내려받기", src_data, file_name=src_name)
+            target.download_button("원본 내려받기", data_, file_name=name_, key=f"dl_{caption}_{name_}")
+
+    if has_photo and dup_name:
+        with st.container(key="row_dup_photos"):
+            p1, p2 = st.columns(2)
+        show_photo(p1, w["originals"][rid], "이 영수증")
+        if dup_photo:
+            show_photo(p2, dup_photo, f"겹치는 영수증 · {dup_photo[0]}")
+        else:
+            p2.caption(f"겹치는 영수증({dup_name})은 사진이 없어요. 지난 기록에서 불러온 행이에요.")
+    elif has_photo:
+        src_name, _ = w["originals"][rid]
+        show_photo(st, w["originals"][rid], src_name)
     else:
         st.caption("원본 사진이 없는 행이에요. (지난 기록에서 불러왔거나 직접 추가한 행)")
     if text(row["사유"]):
@@ -609,25 +642,18 @@ if work:
     with st.container(key="export_card"):
         st.markdown('<div class="rc-section">내보내기</div>', unsafe_allow_html=True)
 
-        # 분기는 여러 개일 때만 고르게 한다
-        quarters = sorted({q for q in edited["분기"] if q})
-        has_unknown = bool((edited["분기"] == "").any())
-        q_options = quarters + (["날짜 없음"] if has_unknown else [])
-        picked_q = (
-            st.multiselect("내보낼 분기", q_options, default=q_options) if len(q_options) > 1 else q_options
-        )
-
-        e1, e2 = st.columns([1.6, 1], vertical_alignment="bottom")
-        file_stem = e1.text_input("파일 이름", value="expense_result")
-        out_format = e2.segmented_control(
-            "파일 형식", ["엑셀", "CSV"], default="엑셀", key="out_format"
-        ) or "엑셀"
+        # 파일 이름 · 형식 (한 줄). 분기는 파일의 '분기' 칸으로 들어간다
+        with st.container(key="row_export"):
+            e1, e2 = st.columns([1.7, 1], vertical_alignment="bottom")
+            file_stem = e1.text_input("파일 이름", value="expense_result")
+            out_format = e2.segmented_control(
+                "파일 형식", ["엑셀", "CSV"], default="엑셀", key="out_format"
+            ) or "엑셀"
         as_csv = out_format == "CSV"
         download_slot = st.empty()
         extra_slot = st.container()  # 안내 문구·증빙 zip 버튼 자리
 
-        mask = edited["분기"].isin(picked_q) | (("날짜 없음" in picked_q) & (edited["분기"] == ""))
-        export_rows = edited[mask].reset_index(drop=True)
+        export_rows = edited.reset_index(drop=True)
 
         # 구분별 합계 (원화만 금액 합계)
         summary_df = build_summary_df(export_rows, cat_options)
@@ -697,7 +723,7 @@ if work:
         headers, duplicated = resolve_headers(selected_cols, rename_map)
 
         if export_rows.empty:
-            download_slot.info("선택한 분기에 영수증이 없어요.")
+            download_slot.info("내보낼 영수증이 없어요.")
         elif not [c for c in selected_cols if c != "증빙파일"]:
             download_slot.info("넣을 컬럼을 하나 이상 남겨 주세요.")
         elif duplicated:
