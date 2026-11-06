@@ -156,7 +156,7 @@ def _to_result_table(raw: pd.DataFrame, originals: list) -> pd.DataFrame:
 
     needed = {"사용일자", "상호명", "결제금액"}
     if not needed & set(mapping):
-        raise ValueError("사용일자·상호명·결제금액 컬럼을 찾지 못했습니다. 이 서비스에서 받은 엑셀인지 확인하세요.")
+        raise ValueError("사용일자·상호명·결제금액 컬럼을 찾지 못했습니다. 이 서비스에서 받은 파일인지 확인하세요.")
 
     out = pd.DataFrame({c: raw[mapping[c]] if c in mapping else "" for c in COLUMNS})
     out["사용일자"] = out["사용일자"].map(_clean_date)
