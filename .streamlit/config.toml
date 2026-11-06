@@ -1,0 +1,15 @@
+# 화면 테마: 휴대폰·PC가 라이트면 라이트, 다크면 다크로 자동 전환된다.
+# [theme] 아래에 backgroundColor 같은 색을 직접 넣으면 한 가지 테마로 고정되니,
+# 색은 항상 [theme.light] / [theme.dark] 양쪽에 나눠 넣는다.
+
+[theme.light]
+primaryColor = "#2563EB"
+backgroundColor = "#F3F4F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#111827"
+
+[theme.dark]
+primaryColor = "#60A5FA"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1A1D24"
+textColor = "#F3F4F6"

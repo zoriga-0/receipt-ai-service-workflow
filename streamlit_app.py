@@ -9,6 +9,7 @@ from media import build_zip, evidence_filename, make_preview, prepare_upload
 from normalize import CATEGORIES, COLUMNS, REVIEW_OPTIONS, normalize_date, parse_amount
 from records import add_quarter, detect_duplicates, read_previous_excel
 from service import process_receipts
+from ui_extras import AnalysisProgress, is_production, leave_guard
 
 try:  # 드래그로 컬럼 순서를 바꾸는 컴포넌트 (pip install streamlit-sortables)
     from streamlit_sortables import sort_items
@@ -48,14 +49,20 @@ def text(v) -> str:
 # 설정 확인
 ##################################################
 
+# https(배포 사이트)면 개발용 정보(환경변수 이름, MOCK 안내, Agent 원본 응답)를 숨긴다.
+PROD = is_production()
+
 missing = config.missing_settings()
 if missing:
-    st.error(
-        "다음 환경변수가 비어 있어 영수증 분석을 실행할 수 없습니다: "
-        + ", ".join(missing)
-        + "\n\n로컬은 .env 파일, Railway는 Variables 탭에 넣은 뒤 다시 실행하세요."
-    )
-if config.USE_MOCK:
+    if PROD:
+        st.error("지금은 영수증 분석을 할 수 없습니다. 잠시 후 다시 시도해주세요.")
+    else:
+        st.error(
+            "다음 환경변수가 비어 있어 영수증 분석을 실행할 수 없습니다: "
+            + ", ".join(missing)
+            + "\n\n로컬은 .env 파일, Railway는 Variables 탭에 넣은 뒤 다시 실행하세요."
+        )
+if config.USE_MOCK and not PROD:
     st.info("USE_MOCK=1 상태입니다. Upstage API를 호출하지 않고 가짜 결과를 보여줍니다.")
 
 ##################################################
@@ -63,14 +70,34 @@ if config.USE_MOCK:
 ##################################################
 
 uploaded_files = st.file_uploader(
-    "영수증 이미지 또는 PDF를 업로드하세요. (아이폰 HEIC 사진도 됩니다)",
+    "영수증 사진 올리기 (사진·PDF·아이폰 HEIC)",
     type=["png", "jpg", "jpeg", "pdf", "heic", "heif"],
     accept_multiple_files=True,
 )
-previous_xlsx = st.file_uploader(
-    "이어서 정리하기 (선택): 이전에 이 서비스에서 받은 엑셀을 올리면 새 영수증과 합쳐집니다.",
-    type=["xlsx"],
+n_files = len(uploaded_files or [])
+
+# 버튼 1: 새 영수증만 분석
+run_new = st.button(
+    f"영수증 {n_files}장 분석하기" if n_files else "영수증을 올리면 분석할 수 있어요",
+    key="run_new",
+    type="primary",
+    disabled=not n_files or bool(missing),
 )
+
+# 버튼 2: 지난번 엑셀과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
+with st.expander("지난번 엑셀에 이어서 정리하기"):
+    previous_xlsx = st.file_uploader("이 서비스에서 받았던 엑셀", type=["xlsx"])
+    if previous_xlsx and n_files:
+        merge_label = f"엑셀 + 영수증 {n_files}장 합쳐서 분석"
+    elif previous_xlsx:
+        merge_label = "엑셀만 불러오기"
+    else:
+        merge_label = "엑셀을 올리면 이어서 정리할 수 있어요"
+    run_merge = st.button(
+        merge_label,
+        key="run_merge",
+        disabled=not previous_xlsx or bool(missing and n_files),
+    )
 
 # 올린 파일이 바뀌면 이전 결과를 지운다.
 upload_key = tuple((f.name, f.size) for f in (uploaded_files or [])) + (
@@ -80,11 +107,16 @@ if st.session_state.get("upload_key") != upload_key:
     st.session_state.upload_key = upload_key
     st.session_state.pop("work", None)
 
-can_run = bool(uploaded_files or previous_xlsx) and not (missing and uploaded_files)
-if st.button("분석 시작", type="primary", disabled=not can_run):
-    # 1) 이전 엑셀
+
+
+# 파일을 올렸거나, 분석 중이거나, 결과가 있으면 새로고침·창 닫기 때 경고를 띄운다.
+# 분석 전에 그려야 분석이 도는 동안에도 켜져 있다.
+leave_guard(bool(n_files or previous_xlsx or st.session_state.get("work")))
+
+if run_new or run_merge:
+    # 1) 이전 엑셀 (버튼 2를 눌렀을 때만)
     prev_df = pd.DataFrame(columns=COLUMNS)
-    if previous_xlsx:
+    if run_merge and previous_xlsx:
         try:
             prev_df = read_previous_excel(previous_xlsx.getvalue())
         except Exception as e:  # noqa: BLE001
@@ -98,15 +130,11 @@ if st.button("분석 시작", type="primary", disabled=not can_run):
         (prep_errors.append(err) if err else prepared.append((name, data)))
 
     new_df, details, originals = pd.DataFrame(columns=COLUMNS + ["_id"]), [], {}
+    elapsed = None
     if prepared:
-        progress = st.progress(0.0, text="분석 준비 중...")
-
-        def on_progress(done, total, name):
-            progress.progress(done / total, text=f"{done}/{total} 완료 · {name}")
-
-        with st.spinner("Upstage Studio에서 영수증을 분석하고 있습니다..."):
-            new_df, details, originals = process_receipts(prepared, on_progress)
-        progress.empty()
+        tracker = AnalysisProgress(len(prepared))
+        new_df, details, originals = process_receipts(prepared, tracker.update)
+        elapsed = tracker.finish(len(prepared))
 
     # 3) 합치고 중복 확인 (이전 엑셀 행은 표시하지 않고 새 영수증만 표시)
     combined = pd.concat([prev_df.assign(_id=None), new_df], ignore_index=True)
@@ -122,6 +150,8 @@ if st.button("분석 시작", type="primary", disabled=not can_run):
         "prev_count": len(prev_df),
         "dup_count": dup_count,
         "prep_errors": prep_errors,
+        "elapsed": elapsed,
+        "n_new": len(prepared),
     }
 
 ##################################################
@@ -136,7 +166,13 @@ if work:
         st.error(err)
     failed = [d for d in details if d["errors"]]
     if failed:
-        st.warning(f"{len(failed)}개 파일에서 분석 오류가 있었습니다. 아래 '분석 상세'를 확인하세요.")
+        where = "'검토 필요' 사유" if PROD else "아래 '분석 상세'"
+        st.warning(f"{len(failed)}개 파일에서 분석 오류가 있었습니다. {where}를 확인하세요.")
+    if work.get("elapsed") and work.get("n_new"):
+        st.caption(
+            f"분석 시간 {work['elapsed']:.0f}초 · 영수증 {work['n_new']}장 · "
+            f"장당 평균 {work['elapsed'] / work['n_new']:.1f}초"
+        )
     if work["prev_count"]:
         st.info(f"이전 엑셀에서 {work['prev_count']}건을 불러와 새 영수증과 합쳤습니다.")
     if work["dup_count"]:
@@ -366,8 +402,8 @@ if work:
             else:
                 d2.info("묶을 원본 사진이 없습니다.")
 
-    # ---------- 분석 상세 ----------
-    if details:
+    # ---------- 분석 상세 (개발 환경에서만) ----------
+    if details and not PROD:
         with st.expander("분석 상세 (Agent 원본 응답·오류)"):
             for d in details:
                 st.markdown(f"**{d['파일명']}**")

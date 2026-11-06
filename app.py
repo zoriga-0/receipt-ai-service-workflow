@@ -106,7 +106,7 @@ def run_receipt_workflow(files: list[tuple[str, bytes]], on_progress=None):
             results[i] = future.result()
             done += 1
             if on_progress:
-                on_progress(done, total, files[i][0])
+                on_progress(done, total, files[i][0], results[i][0])
 
     rows = [r for r, _ in results]
     details = [d for _, d in results]

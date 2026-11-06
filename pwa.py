@@ -14,12 +14,18 @@ Streamlit 기본 페이지(index.html)에 필요한 태그를 끼워 넣는다.
 """
 
 import os
+import re
 
 APP_NAME = "영수증 콜렉터"
-THEME_COLOR = "#F3F4F6"  # 앱 배경색과 맞춘 상단 색
+THEME_COLOR = "#F3F4F6"  # 라이트 테마 배경색과 맞춘 상단 색
+THEME_COLOR_DARK = "#0E1117"  # 다크 테마 배경색과 맞춘 상단 색
 ICON_BG = "#2563EB"  # 아이콘 바탕색
 ICON_FILE = "apple-touch-icon.png"
-MARK = "<!-- receipt-pwa -->"
+MARK = "<!-- receipt-pwa v2 -->"
+END_MARK = "<!-- /receipt-pwa -->"
+# 예전 버전이 넣은 태그 묶음 (지우고 새로 넣기 위해)
+OLD_BLOCK = re.compile(r"<!-- receipt-pwa -->.*?<meta name=\"theme-color\"[^>]*>\n?", re.S)
+NEW_BLOCK = re.compile(re.escape(MARK) + r".*?" + re.escape(END_MARK) + r"\n?", re.S)
 
 HEAD_TAGS = f"""{MARK}
 <link rel="apple-touch-icon" href="/{ICON_FILE}">
@@ -28,7 +34,9 @@ HEAD_TAGS = f"""{MARK}
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="{THEME_COLOR}">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="{THEME_COLOR}">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="{THEME_COLOR_DARK}">
+{END_MARK}
 """
 
 
@@ -92,8 +100,8 @@ def patch_index(static_dir: str) -> str:
 
     with open(index, encoding="utf-8") as f:
         html = f.read()
-    if MARK in html:
-        return "이미 적용되어 있음 (아이콘만 새로 만듦)"
+    # 예전에 넣은 태그가 있으면 지우고 새로 넣는다 (설정을 바꿔도 반영되게)
+    html = NEW_BLOCK.sub("", OLD_BLOCK.sub("", html))
     if "</head>" not in html:
         return "index.html에서 </head>를 찾지 못함"
     html = html.replace("</head>", HEAD_TAGS + "</head>", 1)
