@@ -171,7 +171,11 @@ if run_new or run_merge:
     prepared, prep_errors = [], []
     for f in uploaded_files or []:
         name, data, err = prepare_upload(f.name, f.getvalue())
-        (prep_errors.append(err) if err else prepared.append((name, data)))
+        # (한 줄짜리 식으로 쓰면 Streamlit이 결과 None을 화면에 찍어서 if문으로 쓴다)
+        if err:
+            prep_errors.append(err)
+        else:
+            prepared.append((name, data))
 
     new_df, details, originals = pd.DataFrame(columns=COLUMNS + ["_id"]), [], {}
     elapsed = None
@@ -257,7 +261,7 @@ if work:
                 ),
                 "분기": st.column_config.TextColumn("분기", disabled=True),
                 "결제금액": st.column_config.NumberColumn(
-                    "결제금액", format="localized", min_value=0, step=1
+                    "결제금액", format="localized", min_value=0, step=0.01  # 달러 센트까지
                 ),
                 "경비구분": st.column_config.SelectboxColumn("경비구분", options=cat_options),
                 "목적": st.column_config.TextColumn("목적"),

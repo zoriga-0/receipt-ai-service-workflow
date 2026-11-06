@@ -15,7 +15,8 @@ export API_TOKEN="${API_TOKEN:-$(python -c 'import secrets; print(secrets.token_
 
 python pwa.py
 
-uvicorn server:app --host 127.0.0.1 --port 8000 &
+# --reload: 분석 코드(.py)를 고치면 서버가 알아서 다시 읽는다 (다시 켤 필요 없음)
+uvicorn server:app --host 127.0.0.1 --port 8000 --reload &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT INT TERM
 
