@@ -297,9 +297,25 @@ def sanity_check(extract: dict, today=None) -> list[str]:
     return problems
 
 
+def _money(v, currency="KRW") -> str:
+    return f"{v:,.0f}" if currency == "KRW" else f"{v:,.2f}"
+
+
 def compare_verify(extract: dict, verify: dict) -> list[str]:
-    """1번(추출)과 3번(검증)이 같은 사진을 각자 읽은 값이 다르면 사유를 돌려준다."""
+    """
+    1번(추출)과 3번(검증)이 같은 사진을 각자 읽은 값이 다르면 사유를 돌려준다.
+    3번이 품목 금액 목록을 읽었으면, 품목 합이 합계와 맞는지도 본다.
+    """
     problems = []
+    currency = verify.get("통화") or extract.get("통화") or "KRW"
+    items, total = verify.get("품목금액") or [], verify.get("결제금액")
+    if items and total not in (None, ""):
+        item_sum = sum(items)
+        tolerance = 1 if currency == "KRW" else 0.01  # 반올림 차이는 허용
+        if abs(item_sum - float(total)) > tolerance:
+            problems.append(
+                f"품목 합계 불일치: 품목 합 {_money(item_sum, currency)} ≠ 합계 {_money(float(total), currency)}"
+            )
     a1, a2 = extract.get("결제금액"), verify.get("결제금액")
     if a1 not in (None, "") and a2 not in (None, "") and float(a1) != float(a2):
         problems.append(f"교차검증 불일치: 금액 {a1:,} ≠ {a2:,}")
