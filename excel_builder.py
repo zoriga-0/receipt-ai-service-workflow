@@ -214,3 +214,24 @@ def dataframe_to_excel_bytes(
         meta.sheet_state = "hidden"
     output.seek(0)
     return output.getvalue()
+
+
+
+def dataframe_to_csv_bytes(
+    df: pd.DataFrame,
+    columns: list[str] | None = None,
+    headers: dict[str, str] | None = None,
+) -> bytes:
+    """
+    결과 표를 CSV로 만든다. (표 하나만 담기므로 집계 시트·노란색 표시는 없다)
+    UTF-8 BOM을 붙여서 엑셀에서 열어도 한글이 깨지지 않는다.
+    """
+    columns = columns or [c for c in df.columns if not str(c).startswith("_")]
+    out = df[columns].copy()
+    if "결제금액" in out.columns:  # 28000.0 → 28000
+        out["결제금액"] = out["결제금액"].map(
+            lambda v: "" if pd.isna(v) else (int(v) if float(v).is_integer() else v)
+        )
+    if headers:
+        out = out.rename(columns={c: headers.get(c) or c for c in columns})
+    return out.to_csv(index=False).encode("utf-8-sig")

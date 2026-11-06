@@ -4,7 +4,12 @@ import pandas as pd
 import streamlit as st
 
 import config
-from excel_builder import build_summary_df, dataframe_to_excel_bytes, resolve_headers
+from excel_builder import (
+    build_summary_df,
+    dataframe_to_csv_bytes,
+    dataframe_to_excel_bytes,
+    resolve_headers,
+)
 from media import build_zip, evidence_filename, make_preview, prepare_upload
 from normalize import CATEGORIES, COLUMNS, REVIEW_OPTIONS, normalize_date, parse_amount
 from records import add_quarter, detect_duplicates, read_previous_excel
@@ -83,16 +88,15 @@ run_new = st.button(
     type="primary",
     disabled=not n_files or bool(missing),
 )
-
-# 버튼 2: 지난번 엑셀과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
-with st.expander("지난번 엑셀에 이어서 정리하기"):
-    previous_xlsx = st.file_uploader("이 서비스에서 받았던 엑셀", type=["xlsx"])
+# 버튼 2: 지난번 파일과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
+with st.expander("지난번 엑셀·CSV에 이어서 정리하기"):
+    previous_xlsx = st.file_uploader("이 서비스에서 받았던 엑셀 또는 CSV", type=["xlsx", "csv"])
     if previous_xlsx and n_files:
-        merge_label = f"엑셀 + 영수증 {n_files}장 합쳐서 분석"
+        merge_label = f"이전 기록 + 영수증 {n_files}장 합쳐서 분석"
     elif previous_xlsx:
-        merge_label = "엑셀만 불러오기"
+        merge_label = "이전 기록만 불러오기"
     else:
-        merge_label = "엑셀을 올리면 이어서 정리할 수 있어요"
+        merge_label = "엑셀이나 CSV를 올리면 이어서 정리할 수 있어요"
     run_merge = st.button(
         merge_label,
         key="run_merge",
@@ -118,9 +122,9 @@ if run_new or run_merge:
     prev_df = pd.DataFrame(columns=COLUMNS)
     if run_merge and previous_xlsx:
         try:
-            prev_df = read_previous_excel(previous_xlsx.getvalue())
+            prev_df = read_previous_file(previous_xlsx.name, previous_xlsx.getvalue())
         except Exception as e:  # noqa: BLE001
-            st.error(f"이전 엑셀을 읽지 못했습니다: {e}")
+            st.error(f"이전 파일을 읽지 못했습니다: {e}")
             st.stop()
 
     # 2) 새 영수증 (HEIC → JPG)
@@ -174,7 +178,7 @@ if work:
             f"장당 평균 {work['elapsed'] / work['n_new']:.1f}초"
         )
     if work["prev_count"]:
-        st.info(f"이전 엑셀에서 {work['prev_count']}건을 불러와 새 영수증과 합쳤습니다.")
+        st.info(f"이전 기록에서 {work['prev_count']}건을 불러와 새 영수증과 합쳤습니다.")
     if work["dup_count"]:
         st.warning(f"날짜·상호·금액이 같은 중복 의심 영수증이 {work['dup_count']}건 있습니다.")
 
@@ -296,8 +300,12 @@ if work:
     krw = edited.loc[edited["통화"] == "KRW", "결제금액"].sum()
     c4.metric("KRW 합계", f"{krw:,.0f}원")
 
-    # ---------- 엑셀 내보내기 ----------
-    st.subheader("엑셀 내보내기")
+    # ---------- 내보내기 (엑셀 / CSV) ----------
+    st.subheader("내보내기")
+    out_format = st.radio("파일 형식", ["엑셀 (.xlsx)", "CSV (.csv)"], horizontal=True)
+    as_csv = out_format.startswith("CSV")
+    if as_csv:
+        st.caption("CSV는 표 하나만 담겨서 집계 시트와 '검토 필요' 노란색 표시가 빠져요.")
 
     # (1) 분기 고르기
     quarters = sorted({q for q in edited["분기"] if q})
@@ -342,7 +350,7 @@ if work:
     # (4) 옵션
     col_a, col_b, col_c = st.columns([2, 1, 1])
     file_stem = col_a.text_input("파일 이름", value="expense_result")
-    include_summary = col_b.checkbox("집계 시트 포함", value=True)
+    include_summary = col_b.checkbox("집계 시트 포함", value=True, disabled=as_csv)
     want_zip = col_c.checkbox(
         "증빙 사진 zip도 받기",
         value=False,
@@ -380,15 +388,21 @@ if work:
         pending_left = int((export_rows["검토여부"] == "검토 필요").sum())
         if pending_left:
             st.caption(f"아직 검토 필요 {pending_left}건이 남아 있습니다. 엑셀에서는 노란색으로 표시됩니다.")
-        excel_bytes = dataframe_to_excel_bytes(
-            export_rows, columns=selected_cols, include_summary=include_summary, headers=headers
-        )
+        if as_csv:
+            file_bytes = dataframe_to_csv_bytes(export_rows, columns=selected_cols, headers=headers)
+            file_label, file_ext, file_mime = "CSV", "csv", "text/csv"
+        else:
+            file_bytes = dataframe_to_excel_bytes(
+                export_rows, columns=selected_cols, include_summary=include_summary, headers=headers
+            )
+            file_label, file_ext = "엑셀", "xlsx"
+            file_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         d1, d2 = st.columns(2)
         d1.download_button(
-            label=f"엑셀 다운로드 ({len(export_rows)}건)",
-            data=excel_bytes,
-            file_name=f"{safe_stem}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            label=f"{file_label} 다운로드 ({len(export_rows)}건)",
+            data=file_bytes,
+            file_name=f"{safe_stem}.{file_ext}",
+            mime=file_mime,
             type="primary",
         )
         if want_zip:

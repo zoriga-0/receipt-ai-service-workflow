@@ -116,7 +116,36 @@ def read_previous_excel(data: bytes) -> pd.DataFrame:
     meta = sheets.get("_columns")
     if meta is not None and len(meta.columns) == len(raw.columns):
         originals = [str(c) for c in meta.columns]
+    return _to_result_table(raw, originals)
 
+
+def read_previous_csv(data: bytes) -> pd.DataFrame:
+    """
+    이 서비스에서 받은 CSV(또는 같은 컬럼의 CSV)를 결과 표 형식으로 돌려준다.
+    한글 엑셀에서 저장한 CSV(cp949)도 읽는다.
+    CSV는 숨김 시트가 없어서, 컬럼 이름을 직접 바꿨다면 별칭 표로 찾을 수 있는 이름이어야 한다.
+    """
+    raw = None
+    for enc in ("utf-8-sig", "cp949", "euc-kr"):
+        try:
+            raw = pd.read_csv(io.BytesIO(data), dtype=str, keep_default_na=False, encoding=enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if raw is None:
+        raise ValueError("CSV 글자 인코딩을 읽지 못했습니다. UTF-8로 저장해 다시 올려주세요.")
+    return _to_result_table(raw, list(raw.columns))
+
+
+def read_previous_file(name: str, data: bytes) -> pd.DataFrame:
+    """파일 확장자를 보고 엑셀 또는 CSV로 읽는다."""
+    if name.lower().endswith(".csv"):
+        return read_previous_csv(data)
+    return read_previous_excel(data)
+
+
+def _to_result_table(raw: pd.DataFrame, originals: list) -> pd.DataFrame:
+    """엑셀·CSV에서 읽은 표를 결과 표 컬럼(COLUMNS)에 맞춘다."""
     mapping = {}  # 표준 컬럼 → 엑셀 컬럼
     for excel_col, orig in zip(raw.columns, originals):
         field = orig if orig in COLUMNS else _ALIAS_LOOKUP.get(_norm_key(orig))

@@ -76,6 +76,7 @@ class AnalysisProgress:
             f"영수증 {total}장 분석 시작 · 첫 결과까지 20초 정도 걸려요", expanded=True
         )
         self.bar = self.box.progress(0.0)
+        self.box.caption("분석이 끝날 때까지 새로고침하거나 창을 닫지 마세요.")
 
     def update(self, done: int, total: int, name: str, row: dict | None = None) -> None:
         elapsed = time.monotonic() - self.start
