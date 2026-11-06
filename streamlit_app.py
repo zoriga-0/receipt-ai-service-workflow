@@ -1,10 +1,11 @@
-import hmac
 import re
 
 import pandas as pd
 import streamlit as st
 
 import config
+from auth import access_token, gate
+from drive_store import FOLDER_NAME, RECORD_FILE, DriveError, get_folder, load_records, save_records
 from excel_builder import (
     build_summary_df,
     dataframe_to_csv_bytes,
@@ -40,18 +41,36 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("🧾 영수증 콜렉터")
+head_left, head_right = st.columns([5, 1], vertical_alignment="bottom")
+head_left.title("🧾 영수증 콜렉터")
 
-# 접속 비밀번호: 주소를 아는 누구나 들어와 Upstage 사용량을 쓰지 못하게 막는다
-if config.APP_PASSWORD and not st.session_state.get("authed"):
-    with st.form("login", border=False):
-        pw = st.text_input("비밀번호", type="password")
-        if st.form_submit_button("들어가기", type="primary"):
-            if hmac.compare_digest(pw, config.APP_PASSWORD):
-                st.session_state.authed = True
-                st.rerun()
-            st.error("비밀번호가 맞지 않아요.")
-    st.stop()
+# 들어오는 문: 구글 로그인(+비상용 비밀번호). 주소를 아는 누구나 Upstage 사용량을 쓰지 못하게 막는다
+user = gate()
+
+# 구글로 로그인했으면 내 드라이브의 '영수증 콜렉터' 폴더를 찾거나 만든다 (권한 확인 겸)
+drive_folder, drive_msg = None, ""
+if user.get("email"):
+    cached = st.session_state.get("drive_folder")
+    if cached and cached[0] == user["email"]:
+        drive_folder = cached[1]
+    elif not access_token():
+        drive_msg = '드라이브 토큰이 없어요. secrets.toml [auth]에 expose_tokens = ["access"]를 넣어 주세요.'
+    else:
+        try:
+            drive_folder = get_folder(access_token())
+            st.session_state.drive_folder = (user["email"], drive_folder)
+        except DriveError as e:
+            drive_msg = str(e)
+    with head_right.popover(user.get("name") or user["email"], width="stretch"):
+        st.caption(user["email"])
+        if drive_folder:
+            st.caption(f"저장 위치: 내 드라이브 / {FOLDER_NAME} / {RECORD_FILE}")
+        elif drive_msg:
+            st.warning(drive_msg)
+        if st.button("로그아웃", width="stretch"):
+            st.session_state.pop("drive_folder", None)
+            st.logout()
+drive_ready = bool(drive_folder)
 
 st.caption("영수증 사진만 올리면 정산용 엑셀이 나와요.")
 
@@ -122,25 +141,32 @@ run_new = st.button(
     type="primary",
     disabled=not n_files or bool(missing),
 )
-# 버튼 2: 지난번 파일과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
-with st.expander("지난번 엑셀·CSV에 이어서 정리하기"):
-    previous_xlsx = st.file_uploader("이 서비스에서 받았던 엑셀 또는 CSV", type=["xlsx", "csv"])
-    if previous_xlsx and n_files:
-        merge_label = f"이전 기록 + 영수증 {n_files}장 합쳐서 분석"
-    elif previous_xlsx:
-        merge_label = "이전 기록만 불러오기"
+# 버튼 2: 지난 기록과 합쳐서 분석 (필요한 사람만 펼쳐서 쓴다)
+with st.expander("지난 기록에 이어서 정리하기"):
+    use_drive = drive_ready and st.checkbox(
+        f"내 구글 드라이브의 {RECORD_FILE} 불러오기", value=True, key="use_drive"
+    )
+    previous_xlsx = st.file_uploader(
+        "받아 두었던 엑셀·CSV 올리기" if drive_ready else "이 서비스에서 받았던 엑셀 또는 CSV",
+        type=["xlsx", "csv"],
+    )
+    has_prev = bool(previous_xlsx or use_drive)
+    if has_prev and n_files:
+        merge_label = f"지난 기록 + 영수증 {n_files}장 합쳐서 분석"
+    elif has_prev:
+        merge_label = "지난 기록만 불러오기"
     else:
         merge_label = "엑셀이나 CSV를 올리면 이어서 정리할 수 있어요"
     run_merge = st.button(
         merge_label,
         key="run_merge",
-        disabled=not previous_xlsx or bool(missing and n_files),
+        disabled=not has_prev or bool(missing and n_files),
     )
 
 # 올린 파일이 바뀌면 이전 결과를 지운다.
 upload_key = tuple((f.name, f.size) for f in (uploaded_files or [])) + (
     (previous_xlsx.name, previous_xlsx.size) if previous_xlsx else (),
-)
+) + (("drive",) if use_drive else ())
 if st.session_state.get("upload_key") != upload_key:
     st.session_state.upload_key = upload_key
     st.session_state.pop("work", None)
@@ -159,14 +185,38 @@ if (run_new or run_merge) and config.API_URL and n_files:
         st.stop()
 
 if run_new or run_merge:
-    # 1) 이전 엑셀 (버튼 2를 눌렀을 때만)
-    prev_df = pd.DataFrame(columns=COLUMNS)
+    # 1) 지난 기록: 내 드라이브 + 올린 파일 (버튼 2를 눌렀을 때만)
+    prev_parts, prev_notes, drive_info = [], [], {}
+    if run_merge and use_drive:
+        try:
+            drive_bytes, drive_meta = load_records(access_token(), drive_folder)
+            drive_df = (
+                read_previous_file(RECORD_FILE, drive_bytes) if drive_bytes else pd.DataFrame(columns=COLUMNS)
+            )
+        except DriveError as e:
+            st.error(str(e))
+            st.stop()
+        except Exception as e:  # noqa: BLE001
+            st.error(f"드라이브의 {RECORD_FILE}를 읽지 못했어요: {e}")
+            st.stop()
+        prev_parts.append(drive_df)
+        prev_notes.append(f"내 드라이브 {len(drive_df)}건")
+        drive_info = {  # loaded가 있어야 '전체 저장'을 한다 (드라이브 기록을 모르고 덮어쓰지 않게)
+            "loaded": True,
+            "modified": drive_meta["modifiedTime"] if drive_meta else None,
+            "link": drive_meta.get("webViewLink") if drive_meta else None,
+        }
     if run_merge and previous_xlsx:
         try:
-            prev_df = read_previous_file(previous_xlsx.name, previous_xlsx.getvalue())
+            file_df = read_previous_file(previous_xlsx.name, previous_xlsx.getvalue())
         except Exception as e:  # noqa: BLE001
-            st.error(f"이전 파일을 읽지 못했습니다: {e}")
+            st.error(f"이전 파일을 읽지 못했어요: {e}")
             st.stop()
+        prev_parts.append(file_df)
+        prev_notes.append(f"올린 파일 {len(file_df)}건")
+    prev_df = (
+        pd.concat(prev_parts, ignore_index=True)[COLUMNS] if prev_parts else pd.DataFrame(columns=COLUMNS)
+    )
 
     # 2) 새 영수증 (HEIC → JPG)
     prepared, prep_errors = [], []
@@ -199,6 +249,8 @@ if run_new or run_merge:
         "originals": originals,
         "ver": st.session_state.get("work", {}).get("ver", 0) + 1,
         "prev_count": len(prev_df),
+        "prev_notes": prev_notes,
+        "drive": drive_info,
         "dup_count": dup_count,
         "prep_errors": prep_errors,
         "elapsed": elapsed,
@@ -229,7 +281,9 @@ if work:
         st.warning(f"날짜·상호·금액이 같은 중복 의심 영수증이 {work['dup_count']}건 있어요.")
     info = []
     if work["prev_count"]:
-        info.append(f"이전 기록 {work['prev_count']}건을 불러와 합쳤어요")
+        info.append(
+            f"지난 기록 {work['prev_count']}건({', '.join(work.get('prev_notes') or [])})을 불러와 합쳤어요"
+        )
     if work.get("elapsed") and work.get("n_new"):
         info.append(
             f"분석 시간 {work['elapsed']:.0f}초 (영수증 {work['n_new']}장, "
@@ -505,6 +559,63 @@ if work:
                         )
                     else:
                         st.caption("묶을 원본 사진이 없어요.")
+
+        # ---------- 내 구글 드라이브에 저장 ----------
+        if user.get("email"):
+            st.divider()
+            st.markdown("**내 구글 드라이브에 저장**")
+            drive_info = work.setdefault("drive", {})
+            flash = st.session_state.pop("drive_flash", None)
+            if flash:
+                st.success(flash)
+            if not drive_ready:
+                st.warning(drive_msg or "드라이브에 연결하지 못했어요.")
+            else:
+                if drive_info.get("loaded"):
+                    st.caption(
+                        f"불러온 드라이브 기록과 합친 전체 {len(edited)}건으로 {RECORD_FILE}를 바꿔요. "
+                        "이전 내용은 드라이브의 '버전 관리'에 남아요."
+                    )
+                    save_label, save_done = f"드라이브에 저장 (전체 {len(edited)}건)", False
+                else:
+                    st.caption(f"드라이브의 {RECORD_FILE} 뒤에 이번 결과 {len(edited)}건을 덧붙여요.")
+                    save_done = bool(drive_info.get("appended"))
+                    save_label = "추가했어요" if save_done else f"드라이브 기록에 {len(edited)}건 추가"
+                st.caption("영수증 사진은 저장하지 않아요.")
+                d1, d2 = st.columns([1, 1])
+                if d1.button(save_label, key="drive_save", disabled=save_done or edited.empty, width="stretch"):
+                    token = access_token()
+                    try:
+                        rows = edited[COLUMNS]
+                        if drive_info.get("loaded"):
+                            base_modified, full = drive_info.get("modified"), rows
+                        else:
+                            old_bytes, old_meta = load_records(token, drive_folder)
+                            old = (
+                                read_previous_file(RECORD_FILE, old_bytes)[COLUMNS]
+                                if old_bytes else pd.DataFrame(columns=COLUMNS)
+                            )
+                            base_modified = old_meta["modifiedTime"] if old_meta else None
+                            full = pd.concat([old, rows], ignore_index=True)
+                        xlsx = dataframe_to_excel_bytes(
+                            add_quarter(full), columns=COLUMNS, include_summary=True, categories=cat_options
+                        )
+                        saved = save_records(token, drive_folder, xlsx, base_modified)
+                        drive_info["link"] = saved.get("webViewLink") or drive_info.get("link")
+                        if drive_info.get("loaded"):
+                            drive_info["modified"] = saved.get("modifiedTime")
+                        else:
+                            drive_info["appended"] = True
+                        st.session_state.drive_flash = f"내 드라이브에 저장했어요. ({RECORD_FILE}, 전체 {len(full)}건)"
+                        st.rerun()
+                    except DriveError as e:
+                        st.error(str(e))
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"드라이브의 {RECORD_FILE}를 읽지 못했어요: {e}")
+                if drive_info.get("link"):
+                    d2.link_button("드라이브에서 열기", drive_info["link"], width="stretch")
+                if drive_info.get("appended"):
+                    st.caption("추가한 뒤에 고친 내용은 '지난 기록에 이어서 정리하기'로 드라이브 기록을 불러와 저장해 주세요.")
 
     # ---------- 분석 상세 (개발 환경에서만) ----------
     if details and not PROD:

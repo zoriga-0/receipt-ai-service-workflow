@@ -88,7 +88,10 @@ API_URL = _env("API_URL").rstrip("/")
 # 화면 ↔ 서버 사이 내부 키 (start.sh가 켤 때마다 새로 만든다)
 API_TOKEN = _env("API_TOKEN")
 # 화면 접속 비밀번호. 비워두면 비밀번호 없이 열린다.
+# 구글 로그인(.streamlit/secrets.toml)을 설정하면 로그인 화면에 '비밀번호로 들어가기'로 같이 나온다.
 APP_PASSWORD = _env("APP_PASSWORD")
+# 구글 로그인을 허용할 이메일 (쉼표로 구분). 비워두면 Google Cloud '테스트 사용자'에 넣은 계정이면 누구나.
+ALLOWED_EMAILS = {e.strip().lower() for e in _env("ALLOWED_EMAILS").split(",") if e.strip()}
 # 서버가 받는 파일 크기 한도
 MAX_UPLOAD_MB = _env_int("MAX_UPLOAD_MB", 20)
 
