@@ -1,3 +1,4 @@
+import hmac
 import re
 
 import pandas as pd
@@ -21,6 +22,7 @@ from normalize import (
     parse_categories,
 )
 from records import add_quarter, detect_duplicates, read_previous_file
+from api_client import run_via_api, server_status
 from service import process_receipts
 from ui_extras import AnalysisProgress, is_production, leave_guard
 
@@ -39,6 +41,18 @@ st.markdown(
 )
 
 st.title("🧾 영수증 콜렉터")
+
+# 접속 비밀번호: 주소를 아는 누구나 들어와 Upstage 사용량을 쓰지 못하게 막는다
+if config.APP_PASSWORD and not st.session_state.get("authed"):
+    with st.form("login", border=False):
+        pw = st.text_input("비밀번호", type="password")
+        if st.form_submit_button("들어가기", type="primary"):
+            if hmac.compare_digest(pw, config.APP_PASSWORD):
+                st.session_state.authed = True
+                st.rerun()
+            st.error("비밀번호가 맞지 않아요.")
+    st.stop()
+
 st.caption("영수증 사진만 올리면 정산용 엑셀이 나와요.")
 
 CURRENCIES = ["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]
@@ -68,7 +82,7 @@ if missing:
         st.error(
             "다음 환경변수가 비어 있어 영수증 분석을 실행할 수 없습니다: "
             + ", ".join(missing)
-            + "\n\n로컬은 .env 파일, Railway는 Variables 탭에 넣은 뒤 다시 실행하세요."
+            + "\n\n.env 파일에 넣은 뒤 다시 실행하세요."
         )
 if config.USE_MOCK and not PROD:
     st.info("USE_MOCK=1 상태입니다. Upstage API를 호출하지 않고 가짜 결과를 보여줍니다.")
@@ -136,6 +150,13 @@ if st.session_state.get("upload_key") != upload_key:
 # 분석 전에 그려야 분석이 도는 동안에도 켜져 있다.
 leave_guard(bool(n_files or previous_xlsx or st.session_state.get("work")))
 
+if (run_new or run_merge) and config.API_URL and n_files:
+    # 서버를 쓰는 설정이면, 분석 전에 서버가 켜져 있는지 먼저 확인한다
+    alive, why = server_status()
+    if not alive:
+        st.error(why if not PROD else "분석 서버가 꺼져 있어요. 잠시 후 다시 시도해주세요.")
+        st.stop()
+
 if run_new or run_merge:
     # 1) 이전 엑셀 (버튼 2를 눌렀을 때만)
     prev_df = pd.DataFrame(columns=COLUMNS)
@@ -157,7 +178,8 @@ if run_new or run_merge:
     if prepared:
         tracker = AnalysisProgress(len(prepared))
         context = {"purpose": purpose, "categories": categories}
-        new_df, details, originals = process_receipts(prepared, tracker.update, context)
+        runner = run_via_api if config.API_URL else None  # 서버가 있으면 서버로, 없으면 직접
+        new_df, details, originals = process_receipts(prepared, tracker.update, context, runner)
         elapsed = tracker.finish(len(prepared))
 
     # 3) 합치고 중복 확인 (이전 엑셀 행은 표시하지 않고 새 영수증만 표시)

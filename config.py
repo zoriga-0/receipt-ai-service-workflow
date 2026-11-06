@@ -79,9 +79,26 @@ REVIEW_INPUT = _env("REVIEW_INPUT", "file").lower()
 SOLAR_BASE_URL = _env("SOLAR_BASE_URL", "https://api.upstage.ai/v1")
 PURPOSE_MODEL = _env("PURPOSE_MODEL", "solar-mini4")
 
-def missing_settings() -> list[str]:
-    """실제 API 호출에 필요한데 비어 있는 설정 이름 목록."""
-    if USE_MOCK:
+##################################################
+# 내 Mac에서 서버 + 화면으로 나눠 돌릴 때
+##################################################
+
+# 화면이 부를 FastAPI 서버 주소. 비워두면 화면이 직접 처리한다 (예전 방식).
+API_URL = _env("API_URL").rstrip("/")
+# 화면 ↔ 서버 사이 내부 키 (start.sh가 켤 때마다 새로 만든다)
+API_TOKEN = _env("API_TOKEN")
+# 화면 접속 비밀번호. 비워두면 비밀번호 없이 열린다.
+APP_PASSWORD = _env("APP_PASSWORD")
+# 서버가 받는 파일 크기 한도
+MAX_UPLOAD_MB = _env_int("MAX_UPLOAD_MB", 20)
+
+
+def missing_settings(for_server: bool = False) -> list[str]:
+    """
+    실제 API 호출에 필요한데 비어 있는 설정 이름 목록.
+    화면이 서버(API_URL)를 쓰면 Upstage 키는 서버에만 있으면 되므로 화면 쪽은 확인하지 않는다.
+    """
+    if USE_MOCK or (API_URL and not for_server):
         return []
     missing = []
     if not UPSTAGE_API_KEY:

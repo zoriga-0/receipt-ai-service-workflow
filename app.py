@@ -110,6 +110,10 @@ def _process_one(file_name: str, data: bytes, context: dict | None = None) -> tu
     return row, detail
 
 
+# 서버(server.py)에서 영수증 한 장씩 처리할 때 쓰는 이름
+process_one = _process_one
+
+
 def run_receipt_workflow(files: list[tuple[str, bytes]], on_progress=None, context: dict | None = None):
     """
     files: [(파일명, 바이트), ...]
