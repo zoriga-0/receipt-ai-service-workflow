@@ -104,6 +104,7 @@ purpose = st.text_input(
     placeholder="예: 11월 MT 장보기, 동아리 정기 회의",
     max_chars=100,
 ).strip()
+st.caption("적은 목적은 이번에 올린 영수증 전체에 똑같이 적용돼요. 목적이 다른 영수증은 나눠서 분석해 주세요.")
 with st.expander("경비 구분 목록 바꾸기"):
     preset = st.selectbox("기본 목록", list(CATEGORY_PRESETS), key="cat_preset")
     cat_text = st.text_input(

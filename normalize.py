@@ -325,6 +325,35 @@ def compare_verify(extract: dict, verify: dict) -> list[str]:
     return problems
 
 
+_AMOUNT_MISMATCH = ("품목 합계 불일치", "교차검증 불일치: 금액")
+_CLAUSE_SPLIT = re.compile(r"(?<=[.,])\s+|(?<=고)\s+")
+_MATCH_CLAIM = re.compile(r"(?<!불)일치|이상이 없|문제가 없|검토 사유가 없|(합계|금액|총액)[^.,]{0,20}맞(?!지)")
+
+
+def _close_clause(text: str) -> str:
+    """'…지출이고' 처럼 이어지다 끊긴 문장을 '…지출입니다.'로 닫는다."""
+    text = text.rstrip(" ,")
+    if text.endswith(("이고", "이며")):
+        return text[:-2] + "입니다."
+    if text.endswith("하고"):
+        return text[:-2] + "합니다."
+    if text.endswith("고"):
+        return text[:-1] + "습니다."
+    return text if text.endswith((".", "다", "요")) else text + "."
+
+
+def drop_match_claims(reason: str) -> str:
+    """
+    코드가 금액 불일치를 찾았을 때, AI 사유 중 '합계가 일치한다·이상 없다'는 부분만 뺀다.
+    (AI가 틀리게 '일치'라고 한 말과 '불일치' 경고가 한 칸에 같이 나오지 않게)
+    """
+    parts = [p for p in _CLAUSE_SPLIT.split(reason) if p.strip()]
+    kept = [p for p in parts if not _MATCH_CLAIM.search(p)]
+    if len(kept) == len(parts):
+        return reason
+    return _close_clause(" ".join(kept)) if kept else ""
+
+
 def merge_row(
     file_name: str,
     extract: dict | None,
@@ -371,6 +400,8 @@ def merge_row(
         if not purpose_result:
             checks.append(f"분류 목록에 없는 구분: {category}")
         category = "기타" if "기타" in categories else categories[-1]
+    if any(c.startswith(_AMOUNT_MISMATCH) for c in checks):
+        reasons = [r for r in (drop_match_claims(r) for r in reasons) if r]
     reasons.extend(checks)
     if errors:
         reasons.extend(errors)
