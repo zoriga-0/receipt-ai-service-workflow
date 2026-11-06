@@ -38,6 +38,8 @@ source venv/bin/activate
 Mac을 켤 때마다 자동으로 켜기: **시스템 설정 → 일반 → 로그인 항목**에서 `+`를 눌러 `start.command`를 넣는다.
 (더블클릭해도 켜진다. 꺼지면 10초 뒤 다시 켜고, 창을 닫으면 완전히 꺼진다.)
 
+화면 디자인: `.env`에 `UI_THEME=toss` (또는 `minimal`, `receipt`). 주소 끝에 `?theme=receipt`를 붙이면 잠깐 바꿔 볼 수 있다.
+
 인터넷에 열기 (다른 터미널에서 한 번):
 
 ```bash

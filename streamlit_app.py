@@ -266,6 +266,7 @@ if run_new or run_merge:
         "n_new": len(prepared),
         "categories": categories,
     }
+    leave_guard(False)  # 결과가 생겼으니 새로고침 경고를 끈다 (결과는 새로고침해도 되살아남)
 
 ##################################################
 # 결과

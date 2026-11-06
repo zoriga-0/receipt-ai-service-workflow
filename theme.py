@@ -82,7 +82,7 @@ html, body {{ overscroll-behavior-y: none; }}
 
 .stApp {{ background: var(--rc-bg); color: var(--rc-text); }}
 .stApp, .stApp p, .stApp label, .stApp li, .stApp input, .stApp textarea, .stApp button,
-.stApp h1, .stApp h2, .stApp h3, .stApp summary, .stApp [data-baseweb="tab"] {{
+.stApp h1, .stApp h2, .stApp h3, .stApp summary, .stApp [data-testid="stTab"] p {{
   font-family: var(--rc-font) !important; letter-spacing: -0.01em;
 }}
 .stApp [data-testid="stIconMaterial"] {{ font-family: 'Material Symbols Rounded' !important; letter-spacing: 0; }}
@@ -136,10 +136,11 @@ html, body {{ overscroll-behavior-y: none; }}
 }}
 
 /* 탭 */
-.stApp [data-baseweb="tab-list"] {{ gap: 6px; border-bottom: 1px solid var(--rc-line); }}
-.stApp [data-baseweb="tab"] {{ font-weight: 600; font-size: 15px; padding: 10px 6px; }}
-.stApp [data-baseweb="tab-highlight"] {{ background: var(--rc-accent); }}
-.stApp [data-baseweb="tab-border"] {{ display: none; }}
+.stApp [data-testid="stTab"] {{ padding: 10px 4px; }}
+.stApp [data-testid="stTab"] p {{ font-weight: 600; font-size: 15px; }}
+.stApp [data-testid="stTab"][aria-selected="true"] {{ color: var(--rc-accent); }}
+.stApp [data-testid="stTab"][aria-selected="false"] {{ color: var(--rc-muted); }}
+.stApp .react-aria-SelectionIndicator {{ background: var(--rc-accent) !important; }}
 
 /* 펼치기 */
 .stApp [data-testid="stExpander"] details {{
@@ -161,10 +162,25 @@ html, body {{ overscroll-behavior-y: none; }}
 """
     if name == "receipt":
         css += """
-.rc-brand { text-transform: uppercase; letter-spacing: 0.04em; }
-.rc-hero { font-family: var(--rc-font); }
-.st-key-upload_card, .st-key-result_card, .st-key-login_card { box-shadow: 0 1px 0 var(--rc-line); }
+.rc-brand { font-family: var(--rc-font); letter-spacing: -0.01em; }
+.rc-brand::after { content: "RECEIPT → XLSX"; font-family: var(--rc-num); font-size: 11px;
+  font-weight: 600; letter-spacing: 0.12em; color: var(--rc-muted); margin-left: 10px; }
+.rc-hero { padding-bottom: 18px; border-bottom: 1.5px dashed var(--rc-line); }
+.st-key-upload_card, .st-key-login_card {
+  border: none !important; border-radius: 2px 2px 0 0 !important; position: relative; margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.st-key-upload_card::after, .st-key-login_card::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px;
+  background: linear-gradient(-45deg, transparent 6px, var(--rc-card) 0) 0 0 / 14px 10px repeat-x,
+              linear-gradient(45deg, transparent 6px, var(--rc-card) 0) 0 0 / 14px 10px repeat-x;
+}
+.rc-summary { border-top: 1.5px dashed var(--rc-line); border-bottom: 1.5px dashed var(--rc-line);
+  padding: 14px 0; }
 .rc-total b, .rc-stats b { letter-spacing: 0; }
+.rc-total small, .rc-stats { font-family: var(--rc-num); text-transform: uppercase; font-size: 12px;
+  letter-spacing: 0.06em; }
+.stApp [data-testid="stFileUploaderDropzone"] { background: transparent; }
 """
     if name == "toss":
         css += """

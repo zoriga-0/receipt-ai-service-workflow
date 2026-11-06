@@ -313,7 +313,7 @@ def compare_verify(extract: dict, verify: dict) -> list[str]:
         item_sum = sum(items)
         tolerance = 1 if currency == "KRW" else 0.01  # 반올림 차이는 허용
         if abs(item_sum - float(total)) > tolerance:
-            hint = "품목을 빠뜨려 읽었을 수 있어요" if item_sum < float(total) else "할인·중복 줄을 확인해 주세요"
+            hint = "품목을 빠뜨려 읽었을 수 있어요" if item_sum < float(total) else "할인 줄이나 두 번 읽힌 품목이 있는지 확인해 주세요"
             problems.append(
                 f"품목 합계 불일치: 품목 합 {_money(item_sum, currency)} ≠ 합계 {_money(float(total), currency)}"
                 f" ({hint})"

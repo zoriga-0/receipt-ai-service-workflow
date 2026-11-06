@@ -79,7 +79,8 @@ def detect_duplicates(df: pd.DataFrame, mark_mask: list[bool] | None = None) -> 
         if key not in seen:
             seen[key] = _text(row["파일명"]) or "이전 엑셀의 행"
             continue
-        if mark_mask[i] and "중복" not in _text(row["사유"]):
+        reason = _text(row["사유"])
+        if mark_mask[i] and "중복 의심" not in reason and "동일 파일 중복" not in reason:
             df.at[i, "검토여부"] = "검토 필요"
             df.at[i, "사유"] = join_reason(row["사유"], f"중복 의심: {seen[key]}와 날짜·상호·금액이 같음")
             marked += 1
