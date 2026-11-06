@@ -86,7 +86,7 @@ html, body {{ overscroll-behavior-y: none; }}
   font-family: var(--rc-font) !important; letter-spacing: -0.01em;
 }}
 .stApp [data-testid="stIconMaterial"] {{ font-family: 'Material Symbols Rounded' !important; letter-spacing: 0; }}
-[data-testid="stMainBlockContainer"] {{ max-width: 980px; padding-top: 2.2rem; padding-bottom: 5rem; }}
+[data-testid="stMainBlockContainer"] {{ max-width: 760px; padding-top: 1.6rem; padding-bottom: 5rem; }}
 .stApp [data-testid="stCaptionContainer"], .stApp [data-testid="stCaptionContainer"] p {{ color: var(--rc-muted); }}
 
 /* 머리글 */
@@ -97,7 +97,7 @@ html, body {{ overscroll-behavior-y: none; }}
 .rc-section {{ font-size: 20px; font-weight: 700; color: var(--rc-text); margin: 8px 0 4px; }}
 
 /* 카드 */
-.st-key-upload_card, .st-key-result_card, .st-key-login_card {{
+.st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{
   background: var(--rc-card); border-radius: var(--rc-radius) !important;
   border: var(--rc-border) !important; padding: 22px 22px 20px;
 }}
@@ -128,11 +128,17 @@ html, body {{ overscroll-behavior-y: none; }}
 }}
 .stApp [data-testid="stFileUploaderDropzone"] button [data-testid="stMarkdownContainer"] p {{ font-size: 0; }}
 .stApp [data-testid="stFileUploaderDropzone"] button [data-testid="stMarkdownContainer"] p::after {{
-  content: "사진 고르기"; font-size: 14px; font-weight: 600;
+  content: "파일 고르기"; font-size: 14px; font-weight: 600;
+}}
+.stApp [class*="st-key-files_"] [data-testid="stFileUploaderDropzone"] button [data-testid="stMarkdownContainer"] p::after {{
+  content: "영수증 사진 고르기";
 }}
 .stApp [data-testid="stFileUploaderDropzoneInstructions"] span {{ font-size: 0; }}
 .stApp [data-testid="stFileUploaderDropzoneInstructions"] span::after {{
-  content: "사진·PDF·아이폰 HEIC · 여러 장 한 번에"; font-size: 13px; color: var(--rc-muted);
+  content: "엑셀(.xlsx)·CSV"; font-size: 13px; color: var(--rc-muted);
+}}
+.stApp [class*="st-key-files_"] [data-testid="stFileUploaderDropzoneInstructions"] span::after {{
+  content: "사진·PDF·아이폰 HEIC · 여러 장 한 번에";
 }}
 
 /* 탭 */
@@ -148,7 +154,67 @@ html, body {{ overscroll-behavior-y: none; }}
 }}
 .stApp [data-testid="stExpander"] summary p {{ font-size: 14px; color: var(--rc-muted); font-weight: 500; }}
 
+/* 한 줄 고정: 휴대폰에서도 칸이 아래로 떨어지지 않게 (키가 row 로 시작하는 묶음) */
+[class*="st-key-row"] [data-testid="stHorizontalBlock"] {{ flex-wrap: nowrap !important; gap: 10px; }}
+[class*="st-key-row"] [data-testid="stColumn"] {{ min-width: 0 !important; width: auto !important; }}
+
+.st-key-row_cats {{ margin-bottom: 4px; }}
+.stApp [data-testid="stButtonGroup"] {{ margin-top: 4px; }}
+.rc-sub {{ font-size: 14px; font-weight: 700; color: var(--rc-text); margin: 14px 0 2px; }}
+
+/* 경비 구분 칩 */
+.rc-chips {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
+.rc-chips-label {{ font-size: 13px; color: var(--rc-muted); margin-right: 2px; }}
+.rc-chip {{ font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--rc-soft);
+  color: var(--rc-text); }}
+
+/* 검토 안내 */
+.st-key-review_banner {{ background: var(--rc-card); border-radius: var(--rc-radius); border: var(--rc-border);
+  padding: 16px 18px; border-left: 4px solid var(--rc-warn) !important; }}
+.rc-banner b {{ display: block; font-size: 16px; color: var(--rc-text); }}
+.rc-banner span {{ font-size: 13px; color: var(--rc-muted); }}
+.rc-banner.ok {{ background: var(--rc-card); border-radius: var(--rc-radius); padding: 14px 18px;
+  border-left: 4px solid var(--rc-accent); }}
+
+/* 영수증 카드 목록 */
+.st-key-receipt_list {{ gap: 8px; }}
+[class*="st-key-rowc_"] {{ background: var(--rc-card); border-radius: calc(var(--rc-radius) * 0.7);
+  border: var(--rc-border); padding: 14px 12px 14px 16px; }}
+.rc-row-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }}
+.rc-row-top b {{ font-size: 15px; color: var(--rc-text); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }}
+.rc-amt {{ font-family: var(--rc-num); font-weight: 700; font-size: 15px; color: var(--rc-text);
+  white-space: nowrap; }}
+.rc-row-sub {{ font-size: 13px; color: var(--rc-muted); margin-top: 2px; display: flex; gap: 8px;
+  align-items: center; flex-wrap: wrap; }}
+.rc-badge {{ font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }}
+.rc-badge.pending {{ color: var(--rc-warn); background: color-mix(in srgb, var(--rc-warn) 12%, transparent); }}
+.rc-badge.done {{ color: var(--rc-accent); background: color-mix(in srgb, var(--rc-accent) 12%, transparent); }}
+.rc-row-reason {{ font-size: 12.5px; color: var(--rc-muted); margin: 6px 0 2px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }}
+[class*="st-key-rowc_"] button {{ min-height: 36px; padding: 0 10px; font-size: 13px; }}
+
+/* 구분별 합계 */
+.rc-sum {{ margin: 6px 0 4px; }}
+.rc-sum-row {{ display: grid; grid-template-columns: 1fr auto auto; gap: 14px; padding: 8px 2px;
+  border-bottom: 1px solid var(--rc-line); font-size: 14px; color: var(--rc-text); }}
+.rc-sum-row span:nth-child(2) {{ color: var(--rc-muted); }}
+.rc-sum-row b {{ font-family: var(--rc-num); min-width: 90px; text-align: right; }}
+.rc-sum-row.total {{ border-bottom: none; font-weight: 700; }}
+
+/* 휴대폰 */
+@media (max-width: 640px) {{
+  [data-testid="stMainBlockContainer"] {{ padding: 1rem 0.9rem 4rem; }}
+  .rc-hero {{ font-size: calc(var(--rc-h1) * 0.82); margin: 18px 0 16px; }}
+  .st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{ padding: 16px 14px; }}
+  .rc-total b {{ font-size: 30px; }}
+  .stApp [data-testid="stFileUploaderDropzone"] {{ padding: 14px 12px; }}
+  div[role="dialog"] {{ width: 100vw !important; max-width: 100vw !important; margin: 0 !important;
+    border-radius: 16px 16px 0 0 !important; }}
+}}
+
 /* 결과 요약 */
+.rc-total {{ margin: 2px 0 8px; }}
 .rc-summary {{ display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
   gap: 8px 24px; margin: 4px 0 10px; }}
 .rc-total small {{ display: block; font-size: 14px; color: var(--rc-muted); font-weight: 500; }}
