@@ -68,14 +68,18 @@ def _style_header(ws, ncols):
     ws.freeze_panes = "A2"
 
 
-def _write_detail(ws, df: pd.DataFrame):
+def _write_detail(ws, df: pd.DataFrame, review_mask: list[bool] | None = None):
+    """review_mask: 행마다 '검토 필요'인지. 엑셀에 검토여부 칸을 넣지 않아도 노란색 표시를 하려고 받는다."""
     cols = list(df.columns)
     _style_header(ws, len(cols))
     review_col = cols.index("검토여부") + 1 if "검토여부" in cols else None
     amount_col = cols.index("결제금액") + 1 if "결제금액" in cols else None
 
     for r in range(2, len(df) + 2):
-        needs_review = review_col and ws.cell(row=r, column=review_col).value == "검토 필요"
+        if review_mask is not None:
+            needs_review = bool(review_mask[r - 2])
+        else:
+            needs_review = review_col and ws.cell(row=r, column=review_col).value == "검토 필요"
         for c in range(1, len(cols) + 1):
             cell = ws.cell(row=r, column=c)
             cell.border = _BORDER
@@ -206,7 +210,8 @@ def dataframe_to_excel_bytes(
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         export_df.to_excel(writer, index=False, sheet_name=DETAIL_SHEET)
-        _write_detail(writer.sheets[DETAIL_SHEET], export_df)
+        mask = (df["검토여부"] == "검토 필요").tolist() if "검토여부" in df.columns else None
+        _write_detail(writer.sheets[DETAIL_SHEET], export_df, mask)
         if headers:  # 서식·수식은 원래 이름 기준으로 만든 뒤, 제목 칸 글자만 바꾼다
             ws_detail = writer.sheets[DETAIL_SHEET]
             for i, name in enumerate(export_df.columns, start=1):

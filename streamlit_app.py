@@ -53,6 +53,8 @@ theme._loaded_mtime = _theme_mtime
 theme.apply_theme()
 
 CURRENCIES = ["KRW", "USD", "JPY", "EUR", "CNY", "GBP"]
+# 엑셀 칸 고르기에 보여줄 순서 (앞의 네 칸이 기본)
+EXPORT_ORDER = ["사용일자", "상호명", "경비구분", "결제금액", "통화", "목적", "분기", "검토여부", "사유", "파일명"]
 FILE_TYPES = UPLOAD_TYPES  # 사진·PDF·아이폰 HEIC·안드로이드 WEBP
 
 
@@ -672,30 +674,40 @@ if work:
                 )
             st.markdown('<div class="rc-sum">' + "".join(lines) + "</div>", unsafe_allow_html=True)
 
-        with st.expander("파일 세부 설정 (컬럼 · 집계 시트 · 증빙 사진)", icon=":material/tune:"):
-            # (1) 컬럼: 넣을지, 순서, 파일에 표시할 이름을 표 하나에서 정한다
-            st.caption("넣지 않을 컬럼은 체크를 끄고, 순서는 숫자로, 이름은 오른쪽 칸을 두 번 눌러 바꿔요.")
-            col_df = st.data_editor(
-                pd.DataFrame({
-                    "넣기": [True] * len(COLUMNS),
-                    "순서": list(range(1, len(COLUMNS) + 1)),
-                    "원래 이름": COLUMNS,
-                    "파일에 표시할 이름": COLUMNS,
-                }),
-                key="column_editor",
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "넣기": st.column_config.CheckboxColumn("넣기", width="small"),
-                    "순서": st.column_config.NumberColumn("순서", min_value=1, step=1, width="small"),
-                    "원래 이름": st.column_config.TextColumn("원래 이름", disabled=True),
-                },
-            )
-            col_df = col_df.assign(_pos=range(len(col_df)))
-            col_df["순서"] = pd.to_numeric(col_df["순서"], errors="coerce").fillna(len(COLUMNS) + 1)
-            picked = col_df[col_df["넣기"].fillna(False).astype(bool)].sort_values(["순서", "_pos"])
-            selected_cols = [c for c in picked["원래 이름"] if c in COLUMNS]
-            rename_map = dict(zip(col_df["원래 이름"], col_df["파일에 표시할 이름"]))
+        # 엑셀에 넣을 칸: 정산에 필요한 칸만 기본으로 넣는다.
+        # (목적은 경비구분을 정하려고 받는 입력값, 검토여부·사유·파일명은 앱 안에서 쓰는 칸)
+        has_foreign = bool((edited["통화"].fillna("KRW").replace("", "KRW") != "KRW").any())
+        default_cols = ["사용일자", "상호명", "경비구분", "결제금액"] + (["통화"] if has_foreign else [])
+        with st.expander("파일 세부 설정 (넣을 칸 · 집계 시트 · 증빙 사진)", icon=":material/tune:"):
+            picked_cols = st.pills(
+                "엑셀에 넣을 칸 (눌러서 켜고 끄기)",
+                EXPORT_ORDER,
+                selection_mode="multi",
+                default=default_cols,
+                key=f"export_cols_{int(has_foreign)}",
+            ) or []
+            selected_cols = [c for c in EXPORT_ORDER if c in picked_cols]
+            rename_map = {}
+            if st.toggle("칸 이름·순서 바꾸기", key="export_rename"):
+                st.caption("순서는 숫자로, 이름은 오른쪽 칸을 두 번 눌러 바꿔요.")
+                col_df = st.data_editor(
+                    pd.DataFrame({
+                        "순서": list(range(1, len(selected_cols) + 1)),
+                        "원래 이름": selected_cols,
+                        "파일에 표시할 이름": selected_cols,
+                    }),
+                    key=f"column_editor_{'_'.join(selected_cols)}",
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "순서": st.column_config.NumberColumn("순서", min_value=1, step=1, width="small"),
+                        "원래 이름": st.column_config.TextColumn("원래 이름", disabled=True),
+                    },
+                )
+                col_df = col_df.assign(_pos=range(len(col_df)))
+                col_df["순서"] = pd.to_numeric(col_df["순서"], errors="coerce").fillna(len(selected_cols) + 1)
+                selected_cols = [c for c in col_df.sort_values(["순서", "_pos"])["원래 이름"] if c in COLUMNS]
+                rename_map = dict(zip(col_df["원래 이름"], col_df["파일에 표시할 이름"]))
 
             include_summary = st.checkbox("집계 시트 포함 (엑셀만)", value=True)
             want_zip = st.checkbox(
@@ -759,6 +771,8 @@ if work:
                     notes.append(
                         f"아직 검토 필요 {pending_left}건이 남아 있어요" + ("" if as_csv else " (엑셀에서 노란색)")
                     )
+                    if "사유" not in selected_cols:
+                        notes.append("왜 검토가 필요한지 보이게 하려면 세부 설정에서 '사유' 칸을 켜 주세요")
                 if as_csv:
                     notes.append("CSV에는 집계 시트와 노란색 표시가 빠져요")
                 if notes:
