@@ -12,7 +12,7 @@ from excel_builder import (
 )
 from media import build_zip, evidence_filename, make_preview, prepare_upload
 from normalize import CATEGORIES, COLUMNS, REVIEW_OPTIONS, normalize_date, parse_amount
-from records import add_quarter, detect_duplicates, read_previous_excel
+from records import add_quarter, detect_duplicates, read_previous_file
 from service import process_receipts
 from ui_extras import AnalysisProgress, is_production, leave_guard
 
