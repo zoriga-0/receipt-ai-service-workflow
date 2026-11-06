@@ -12,7 +12,23 @@ FIELD_ALIASES에 추가하면 된다.
 
 import re
 
-CATEGORIES = ("식비", "교통비", "활동비", "기타")
+# 사용자가 고를 수 있는 경비 구분 목록 (화면에서 쉼표로 고쳐 쓸 수 있다)
+CATEGORY_PRESETS = {
+    "기본": ["식비", "교통비", "활동비", "기타"],
+    "학생회·동아리": ["행사비", "회의비", "간식비", "비품·소모품비", "교통비", "기타"],
+    "회사": ["복리후생비", "접대비", "회의비", "여비교통비", "소모품비", "기타"],
+}
+
+
+def parse_categories(text: str) -> list[str]:
+    """'행사비, 회의비, 기타' → ['행사비', '회의비', '기타']. 중복 제거, '기타'는 항상 맨 뒤."""
+    items = []
+    for part in str(text or "").replace("\n", ",").split(","):
+        name = part.strip()
+        if name and name not in items:
+            items.append(name)
+    items = [c for c in items if c != "기타"] + ["기타"]
+    return items
 
 FIELD_ALIASES = {
     "사용일자": ["사용일자", "사용일", "거래일자", "거래일시", "결제일자", "결제일시", "일자", "날짜",
@@ -243,7 +259,7 @@ def normalize_review_result(data: dict) -> dict:
 # 1번 + 2번 결과 합치기
 ##################################################
 
-COLUMNS = ["사용일자", "분기", "상호명", "결제금액", "경비구분", "통화", "검토여부", "사유", "파일명"]
+COLUMNS = ["사용일자", "분기", "상호명", "결제금액", "경비구분", "목적", "통화", "검토여부", "사유", "파일명"]
 REVIEW_OPTIONS = ["검토 필요", "검토 완료", "검토 불필요"]
 
 
@@ -297,9 +313,17 @@ def merge_row(
     review: dict | None,
     errors: list[str],
     verify: dict | None = None,
+    purpose_result: dict | None = None,
+    context: dict | None = None,
 ) -> dict:
+    """
+    purpose_result: 목적 반영 분류(Solar) 결과. 있으면 경비구분을 이 값으로 정한다.
+    context: {"purpose": 지출 목적, "categories": 경비 구분 목록}
+    """
     extract = extract or {}
     review = review or {}
+    context = context or {}
+    categories = list(context.get("categories") or CATEGORIES)
 
     category = review.get("경비구분") or extract.get("경비구분") or "기타"
     review_flag = review.get("검토여부", "")
@@ -311,6 +335,24 @@ def merge_row(
     checks = sanity_check(extract) if extract else []
     if verify and extract:
         checks += compare_verify(extract, verify)
+
+    # 목적 반영 분류: 목록 안의 구분이면 그 값을 쓰고, 목적과 안 맞으면 검토 필요
+    if purpose_result:
+        if purpose_result.get("사유"):
+            if review_flag != "검토 필요":
+                reasons = [purpose_result["사유"]]
+            else:
+                reasons.append(f"목적 판단: {purpose_result['사유']}")
+        if purpose_result.get("목록에있음"):
+            category = purpose_result["경비구분"]
+        else:
+            checks.append(f"분류 목록에 없는 구분: {purpose_result.get('경비구분') or '(빈 값)'}")
+        if purpose_result.get("목적부합") not in (None, "예"):
+            checks.append(f"목적 확인({purpose_result['목적부합']})")
+    if category not in categories:
+        if not purpose_result:
+            checks.append(f"분류 목록에 없는 구분: {category}")
+        category = "기타" if "기타" in categories else categories[-1]
     reasons.extend(checks)
     if errors:
         reasons.extend(errors)
@@ -322,6 +364,7 @@ def merge_row(
         "상호명": extract.get("상호명", ""),
         "결제금액": extract.get("결제금액"),
         "경비구분": category,
+        "목적": context.get("purpose", ""),
         "통화": extract.get("통화", ""),
         "검토여부": review_flag,
         "사유": " / ".join(reasons),

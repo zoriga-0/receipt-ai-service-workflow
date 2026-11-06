@@ -27,13 +27,21 @@ _TOTAL_FILL = PatternFill("solid", fgColor="DDEBF7")
 _THIN = Side(style="thin", color="BFBFBF")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
-_WIDTHS = {"사용일자": 12, "분기": 13, "상호명": 28, "결제금액": 14, "경비구분": 10,
+_WIDTHS = {"사용일자": 12, "분기": 13, "상호명": 28, "결제금액": 14, "경비구분": 12, "목적": 20,
            "통화": 8, "검토여부": 12, "사유": 50, "파일명": 28, "증빙파일": 36}
 
 META_SHEET = "_columns"  # 숨김 시트: 원래 컬럼 이름 (이전 엑셀 불러오기용)
 
 
-def build_summary_df(df: pd.DataFrame) -> pd.DataFrame:
+def summary_categories(df: pd.DataFrame, categories: list[str] | None = None) -> list[str]:
+    """집계에 쓸 경비 구분: 사용자 목록 순서대로 + 표에만 있는 구분은 뒤에."""
+    base = list(categories or CATEGORIES)
+    extra = [c for c in df.get("경비구분", pd.Series(dtype=object)).dropna().unique()
+             if c and c not in base]
+    return base + sorted(extra)
+
+
+def build_summary_df(df: pd.DataFrame, categories: list[str] | None = None) -> pd.DataFrame:
     """화면에 보여줄 집계표 (엑셀 집계 시트와 같은 내용)."""
     if df.empty:
         return pd.DataFrame(columns=["통화", "경비구분", "건수", "금액합계"])
@@ -41,7 +49,7 @@ def build_summary_df(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for cur in sorted(c for c in df["통화"].fillna("").unique() if c):
         mask = df["통화"] == cur
-        for cat in CATEGORIES:
+        for cat in summary_categories(df, categories):
             m = mask & (df["경비구분"] == cat)
             rows.append({"통화": cur, "경비구분": cat, "건수": int(m.sum()),
                          "금액합계": amounts[m].sum()})
@@ -82,7 +90,7 @@ def _write_detail(ws, df: pd.DataFrame):
     ws.auto_filter.ref = ws.dimensions
 
 
-def _write_summary(ws, df: pd.DataFrame):
+def _write_summary(ws, df: pd.DataFrame, categories: list[str] | None = None):
     cols = list(df.columns)
     n = len(df) + 1  # 마지막 데이터 행
     col = {name: get_column_letter(cols.index(name) + 1) for name in cols}
@@ -97,7 +105,7 @@ def _write_summary(ws, df: pd.DataFrame):
     currencies = sorted(c for c in df["통화"].fillna("").unique() if c) or ["KRW"]
     for cur in currencies:
         first = r
-        for cat in CATEGORIES:
+        for cat in summary_categories(df, categories):
             ws.cell(row=r, column=1, value=cur)
             ws.cell(row=r, column=2, value=cat)
             ws.cell(row=r, column=3,
@@ -132,9 +140,9 @@ def _write_summary(ws, df: pd.DataFrame):
 _SUMMARY_COLS = {"통화", "경비구분", "결제금액", "검토여부", "파일명"}
 
 
-def _write_summary_values(ws, full_df: pd.DataFrame):
+def _write_summary_values(ws, full_df: pd.DataFrame, categories: list[str] | None = None):
     """선택한 컬럼에 집계용 컬럼이 빠졌을 때: 수식 대신 계산된 값으로 집계."""
-    summary = build_summary_df(full_df)
+    summary = build_summary_df(full_df, categories)
     summary = summary[summary["건수"] > 0]
     headers = ["통화", "경비구분", "건수", "금액합계"]
     for c, h in enumerate(headers, start=1):
@@ -185,6 +193,7 @@ def dataframe_to_excel_bytes(
     columns: list[str] | None = None,
     include_summary: bool = True,
     headers: dict[str, str] | None = None,
+    categories: list[str] | None = None,
 ) -> bytes:
     """
     df: 전체 결과(화면에서 수정한 값 포함)
@@ -205,9 +214,9 @@ def dataframe_to_excel_bytes(
         if include_summary and {"통화", "경비구분", "결제금액"} <= set(df.columns):
             ws = writer.book.create_sheet(SUMMARY_SHEET)
             if _SUMMARY_COLS <= set(export_df.columns):
-                _write_summary(ws, export_df)  # 수식: 경비내역을 고치면 같이 바뀜
+                _write_summary(ws, export_df, categories)  # 수식: 경비내역을 고치면 같이 바뀜
             else:
-                _write_summary_values(ws, df)  # 값: 선택에서 빠진 컬럼이 있을 때
+                _write_summary_values(ws, df, categories)  # 값: 선택에서 빠진 컬럼이 있을 때
         meta = writer.book.create_sheet(META_SHEET)
         for i, name in enumerate(export_df.columns, start=1):
             meta.cell(row=1, column=i, value=name)

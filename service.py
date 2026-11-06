@@ -6,7 +6,7 @@ from normalize import COLUMNS
 from records import join_reason
 
 
-def process_receipts(files: list[tuple[str, bytes]], on_progress=None):
+def process_receipts(files: list[tuple[str, bytes]], on_progress=None, context: dict | None = None):
     """
     files: [(파일명, 바이트), ...]  (HEIC는 미리 JPG로 바꿔서 넘긴다)
     반환: (결과 DataFrame, 파일별 상세, 원본 파일 {행ID: (파일명, 바이트)})
@@ -22,7 +22,9 @@ def process_receipts(files: list[tuple[str, bytes]], on_progress=None):
             first_of[h] = i
             unique_idx.append(i)
 
-    rows_u, details_u = run_receipt_workflow([files[i] for i in unique_idx], on_progress=on_progress)
+    rows_u, details_u = run_receipt_workflow(
+        [files[i] for i in unique_idx], on_progress=on_progress, context=context
+    )
     result_of = {hashes[i]: (row, det) for i, row, det in zip(unique_idx, rows_u, details_u)}
 
     rows, details, originals = [], [], {}

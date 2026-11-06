@@ -11,7 +11,15 @@ from excel_builder import (
     resolve_headers,
 )
 from media import build_zip, evidence_filename, make_preview, prepare_upload
-from normalize import CATEGORIES, COLUMNS, REVIEW_OPTIONS, normalize_date, parse_amount
+from normalize import (
+    CATEGORIES,
+    CATEGORY_PRESETS,
+    COLUMNS,
+    REVIEW_OPTIONS,
+    normalize_date,
+    parse_amount,
+    parse_categories,
+)
 from records import add_quarter, detect_duplicates, read_previous_file
 from service import process_receipts
 from ui_extras import AnalysisProgress, is_production, leave_guard
@@ -81,6 +89,22 @@ uploaded_files = st.file_uploader(
 )
 n_files = len(uploaded_files or [])
 
+# 지출 목적과 경비 구분 목록: 목적을 적거나 목록을 바꾸면 Solar가 목적에 맞게 다시 분류한다
+purpose = st.text_input(
+    "이번 영수증은 무엇을 위한 지출인가요? (선택)",
+    placeholder="예: 11월 MT 장보기, 동아리 정기 회의",
+    max_chars=100,
+).strip()
+with st.expander("경비 구분 목록 바꾸기"):
+    preset = st.selectbox("기본 목록", list(CATEGORY_PRESETS), key="cat_preset")
+    cat_text = st.text_input(
+        "구분 목록 (쉼표로 나눠 고칠 수 있어요. '기타'는 항상 들어가요)",
+        value=", ".join(CATEGORY_PRESETS[preset]),
+        key=f"cat_text_{preset}",
+    )
+categories = parse_categories(cat_text)
+st.caption("경비 구분: " + " · ".join(categories))
+
 # 버튼 1: 새 영수증만 분석
 run_new = st.button(
     f"영수증 {n_files}장 분석하기" if n_files else "영수증을 올리면 분석할 수 있어요",
@@ -137,7 +161,8 @@ if run_new or run_merge:
     elapsed = None
     if prepared:
         tracker = AnalysisProgress(len(prepared))
-        new_df, details, originals = process_receipts(prepared, tracker.update)
+        context = {"purpose": purpose, "categories": categories}
+        new_df, details, originals = process_receipts(prepared, tracker.update, context)
         elapsed = tracker.finish(len(prepared))
 
     # 3) 합치고 중복 확인 (이전 엑셀 행은 표시하지 않고 새 영수증만 표시)
@@ -156,6 +181,7 @@ if run_new or run_merge:
         "prep_errors": prep_errors,
         "elapsed": elapsed,
         "n_new": len(prepared),
+        "categories": categories,
     }
 
 ##################################################
@@ -183,6 +209,9 @@ if work:
         st.warning(f"날짜·상호·금액이 같은 중복 의심 영수증이 {work['dup_count']}건 있습니다.")
 
     currency_options = sorted(set(CURRENCIES) | {c for c in df["통화"].dropna() if c})
+    # 경비 구분 선택지: 분석할 때 정한 목록 + 이전 기록에만 있던 구분
+    cat_options = list(work.get("categories") or CATEGORIES)
+    cat_options += sorted({c for c in df["경비구분"].dropna() if c and c not in cat_options})
 
     tab_review, tab_all = st.tabs(["검토 필요 확인", "전체 결과 표"])
 
@@ -208,7 +237,8 @@ if work:
                 "결제금액": st.column_config.NumberColumn(
                     "결제금액", format="localized", min_value=0, step=1
                 ),
-                "경비구분": st.column_config.SelectboxColumn("경비구분", options=list(CATEGORIES)),
+                "경비구분": st.column_config.SelectboxColumn("경비구분", options=cat_options),
+                "목적": st.column_config.TextColumn("목적"),
                 "통화": st.column_config.SelectboxColumn("통화", options=currency_options),
                 "검토여부": st.column_config.SelectboxColumn("검토여부", options=REVIEW_OPTIONS),
                 "사유": st.column_config.TextColumn("사유", width="large"),
@@ -260,9 +290,10 @@ if work:
                     )
                     cat_now = text(row["경비구분"])
                     f_cat = st.selectbox(
-                        "경비구분", CATEGORIES,
-                        index=CATEGORIES.index(cat_now) if cat_now in CATEGORIES else len(CATEGORIES) - 1,
+                        "경비구분", cat_options,
+                        index=cat_options.index(cat_now) if cat_now in cat_options else len(cat_options) - 1,
                     )
+                    f_purpose = st.text_input("목적", value=text(row["목적"]))
                     cur_now = text(row["통화"]) or "KRW"
                     f_cur = st.selectbox(
                         "통화", currency_options,
@@ -284,6 +315,7 @@ if work:
                         amount = parse_amount(f_amount)
                         new_df.at[pick, "결제금액"] = amount if amount else float("nan")
                         new_df.at[pick, "경비구분"] = f_cat
+                        new_df.at[pick, "목적"] = f_purpose.strip()                        
                         new_df.at[pick, "통화"] = f_cur
                         new_df.at[pick, "사유"] = f_memo.strip()
                         if done:
@@ -315,7 +347,7 @@ if work:
     mask = edited["분기"].isin(picked_q) | (("날짜 없음" in picked_q) & (edited["분기"] == ""))
     export_rows = edited[mask].reset_index(drop=True)
 
-    summary_df = build_summary_df(export_rows)
+    summary_df = build_summary_df(export_rows, cat_options)
     st.dataframe(summary_df[summary_df["건수"] > 0], hide_index=True)
 
     # (2) 컬럼 고르기·순서 바꾸기
@@ -393,7 +425,11 @@ if work:
             file_label, file_ext, file_mime = "CSV", "csv", "text/csv"
         else:
             file_bytes = dataframe_to_excel_bytes(
-                export_rows, columns=selected_cols, include_summary=include_summary, headers=headers
+                export_rows,
+                columns=selected_cols,
+                include_summary=include_summary,
+                headers=headers,
+                categories=cat_options,
             )
             file_label, file_ext = "엑셀", "xlsx"
             file_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -432,3 +468,6 @@ if work:
                 col_y.code(d["review_raw"] or "(없음)", language="json")
                 col_z.caption("3번 검증 Agent 응답")
                 col_z.code(d.get("verify_raw") or "(없음)", language="json")
+                if d.get("purpose_raw"):
+                    st.caption("목적 반영 분류 (Solar) 응답")
+                    st.code(d["purpose_raw"], language="json")

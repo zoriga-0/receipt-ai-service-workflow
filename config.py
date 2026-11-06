@@ -70,8 +70,14 @@ POLL_INTERVAL_SEC = _env_int("POLL_INTERVAL_SEC", 2)
 JOB_TIMEOUT_SEC = _env_int("JOB_TIMEOUT_SEC", 180)
 MAX_WORKERS = _env_int("MAX_WORKERS", 3)  # 동시에 처리할 영수증 수
 
-# 2번 분류가 무엇을 보고 판단할지: text = 1번 추출 결과(빠름), file = 사진을 다시 읽음(예전 방식)
-REVIEW_INPUT = _env("REVIEW_INPUT", "text").lower()
+# 2번 분류가 무엇을 보고 판단할지: file = 사진을 읽음(기본), text = 1번 추출 결과(글)
+# Studio 워크플로우는 파일로만 시작할 수 있어서 기본값은 file.
+REVIEW_INPUT = _env("REVIEW_INPUT", "file").lower()
+
+# 목적 반영 분류: Upstage Solar 모델을 직접 부른다 (Studio 바깥, 같은 API 키)
+# solar-mini4 = 빠름, solar-pro4 = 더 정확함
+SOLAR_BASE_URL = _env("SOLAR_BASE_URL", "https://api.upstage.ai/v1")
+PURPOSE_MODEL = _env("PURPOSE_MODEL", "solar-mini4")
 
 def missing_settings() -> list[str]:
     """실제 API 호출에 필요한데 비어 있는 설정 이름 목록."""

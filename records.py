@@ -15,7 +15,6 @@ from normalize import (
     COLUMNS,
     REVIEW_OPTIONS,
     _norm_key,
-    normalize_category,
     normalize_date,
     normalize_review,
     parse_amount,
@@ -161,12 +160,13 @@ def _to_result_table(raw: pd.DataFrame, originals: list) -> pd.DataFrame:
     out = pd.DataFrame({c: raw[mapping[c]] if c in mapping else "" for c in COLUMNS})
     out["사용일자"] = out["사용일자"].map(_clean_date)
     out["결제금액"] = pd.to_numeric(out["결제금액"].map(parse_amount), errors="coerce")
-    out["경비구분"] = out["경비구분"].map(lambda v: normalize_category(_text(v)) or "기타")
+    # 사용자가 정한 구분(행사비 등)도 있으니 바꾸지 않고 그대로 둔다
+    out["경비구분"] = out["경비구분"].map(lambda v: _text(v) or "기타")
     out["통화"] = out["통화"].map(lambda v: _text(v).upper() or "KRW")
     out["검토여부"] = out["검토여부"].map(
         lambda v: _text(v) if _text(v) in REVIEW_OPTIONS else (normalize_review(_text(v)) or "검토 불필요")
     )
-    for c in ("상호명", "사유", "파일명"):
+    for c in ("상호명", "목적", "사유", "파일명"):
         out[c] = out[c].map(_text)
 
     empty = (out["사용일자"] == "") & (out["상호명"] == "") & out["결제금액"].isna()
