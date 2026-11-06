@@ -334,10 +334,6 @@ if work:
 
     # ---------- 내보내기 (엑셀 / CSV) ----------
     st.subheader("내보내기")
-    out_format = st.radio("파일 형식", ["엑셀 (.xlsx)", "CSV (.csv)"], horizontal=True)
-    as_csv = out_format.startswith("CSV")
-    if as_csv:
-        st.caption("CSV는 표 하나만 담겨서 집계 시트와 '검토 필요' 노란색 표시가 빠져요.")
 
     # (1) 분기 고르기
     quarters = sorted({q for q in edited["분기"] if q})
@@ -382,7 +378,7 @@ if work:
     # (4) 옵션
     col_a, col_b, col_c = st.columns([2, 1, 1])
     file_stem = col_a.text_input("파일 이름", value="expense_result")
-    include_summary = col_b.checkbox("집계 시트 포함", value=True, disabled=as_csv)
+    include_summary = col_b.checkbox("집계 시트 포함", value=True, help="엑셀 파일에만 들어가요.")
     want_zip = col_c.checkbox(
         "증빙 사진 zip도 받기",
         value=False,
@@ -418,8 +414,13 @@ if work:
     else:
         safe_stem = re.sub(r'[\\/:*?"<>|]', "_", file_stem.strip()) or "expense_result"
         pending_left = int((export_rows["검토여부"] == "검토 필요").sum())
-        if pending_left:
-            st.caption(f"아직 검토 필요 {pending_left}건이 남아 있습니다. 엑셀에서는 노란색으로 표시됩니다.")
+
+        # 파일 형식은 다운로드 버튼 바로 옆에서 고른다
+        f1, f2, f3 = st.columns([1.4, 1, 1], vertical_alignment="bottom")
+        out_format = f1.radio(
+            "파일 형식", ["엑셀 (.xlsx)", "CSV (.csv)"], horizontal=True, key="out_format"
+        )
+        as_csv = out_format.startswith("CSV")
         if as_csv:
             file_bytes = dataframe_to_csv_bytes(export_rows, columns=selected_cols, headers=headers)
             file_label, file_ext, file_mime = "CSV", "csv", "text/csv"
@@ -433,8 +434,7 @@ if work:
             )
             file_label, file_ext = "엑셀", "xlsx"
             file_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        d1, d2 = st.columns(2)
-        d1.download_button(
+        f2.download_button(
             label=f"{file_label} 다운로드 ({len(export_rows)}건)",
             data=file_bytes,
             file_name=f"{safe_stem}.{file_ext}",
@@ -443,14 +443,25 @@ if work:
         )
         if want_zip:
             if zip_items:
-                d2.download_button(
+                f3.download_button(
                     label=f"증빙 사진 zip ({len(zip_items)}장)",
                     data=build_zip(zip_items),
                     file_name=f"{safe_stem}_증빙.zip",
                     mime="application/zip",
                 )
             else:
-                d2.info("묶을 원본 사진이 없습니다.")
+                f3.info("묶을 원본 사진이 없습니다.")
+
+        notes = []
+        if pending_left:
+            notes.append(
+                f"아직 검토 필요 {pending_left}건이 남아 있어요"
+                + ("" if as_csv else " (엑셀에서 노란색으로 표시)")
+            )
+        if as_csv:
+            notes.append("CSV에는 집계 시트와 노란색 표시가 빠져요")
+        if notes:
+            st.caption(" · ".join(notes))
 
     # ---------- 분석 상세 (개발 환경에서만) ----------
     if details and not PROD:
