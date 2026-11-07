@@ -667,47 +667,86 @@ if work:
         as_csv = out_format == "CSV"
         export_rows = edited.reset_index(drop=True)
 
-        # 엑셀에 넣을 칸: 정산에 필요한 칸만 기본으로 넣는다.
+        # 엑셀에 넣을 칸: 정산에 필요한 칸만 기본으로 넣는다. 칩을 누른 순서대로 칸이 들어간다.
         # (목적은 경비구분을 정하려고 받는 입력값, 검토여부·사유·파일명은 앱 안에서 쓰는 칸)
         has_foreign = bool((edited["통화"].fillna("KRW").replace("", "KRW") != "KRW").any())
         default_cols = ["사용일자", "상호명", "경비구분", "결제금액"] + (["통화"] if has_foreign else [])
-        with st.expander("파일 세부 설정 (넣을 칸 · 집계 시트 · 증빙 사진)", icon=":material/tune:"):
+        pills_key, order_key = f"export_cols_{int(has_foreign)}", f"export_order_{int(has_foreign)}"
+        if order_key not in st.session_state:
+            st.session_state[order_key] = list(default_cols)
+
+        def reset_export_cols(pk=pills_key, ok=order_key, d=tuple(default_cols)):
+            st.session_state[pk] = list(d)
+            st.session_state[ok] = list(d)
+
+        with st.expander("파일 세부 설정 (넣을 칸 · 미리보기 · 증빙 사진)", icon=":material/tune:"):
+            prev_order = list(st.session_state[order_key])
+            with st.container(key="row_cols_head"):
+                h1, h2 = st.columns([3, 1.2], vertical_alignment="center")
+                h1.markdown(
+                    '<div class="rc-field-label">엑셀에 넣을 칸 <span>누른 순서대로 들어가요</span></div>',
+                    unsafe_allow_html=True,
+                )
+                h2.button("기본으로", on_click=reset_export_cols, key="reset_cols", width="stretch")
             picked_cols = st.pills(
-                "엑셀에 넣을 칸 (눌러서 켜고 끄기)",
+                "엑셀에 넣을 칸",
                 EXPORT_ORDER,
                 selection_mode="multi",
                 default=default_cols,
-                key=f"export_cols_{int(has_foreign)}",
+                key=pills_key,
+                format_func=lambda c: f"{chr(0x2460 + prev_order.index(c))} {c}" if c in prev_order else c,
+                label_visibility="collapsed",
             ) or []
-            selected_cols = [c for c in EXPORT_ORDER if c in picked_cols]
-            rename_map = {}
-            if st.toggle("칸 이름·순서 바꾸기", key="export_rename"):
-                st.caption("순서는 숫자로, 이름은 오른쪽 칸을 두 번 눌러 바꿔요.")
-                col_df = st.data_editor(
-                    pd.DataFrame({
-                        "순서": list(range(1, len(selected_cols) + 1)),
-                        "원래 이름": selected_cols,
-                        "파일에 표시할 이름": selected_cols,
-                    }),
-                    key=f"column_editor_{'_'.join(selected_cols)}",
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "순서": st.column_config.NumberColumn("순서", min_value=1, step=1, width="small"),
-                        "원래 이름": st.column_config.TextColumn("원래 이름", disabled=True),
-                    },
-                )
-                col_df = col_df.assign(_pos=range(len(col_df)))
-                col_df["순서"] = pd.to_numeric(col_df["순서"], errors="coerce").fillna(len(selected_cols) + 1)
-                selected_cols = [c for c in col_df.sort_values(["순서", "_pos"])["원래 이름"] if c in COLUMNS]
-                rename_map = dict(zip(col_df["원래 이름"], col_df["파일에 표시할 이름"]))
+            # 새로 켠 칸은 맨 뒤에, 끈 칸은 빼고 → 누른 순서
+            order = [c for c in prev_order if c in picked_cols] + [c for c in picked_cols if c not in prev_order]
+            if order != prev_order:
+                st.session_state[order_key] = order
+                st.rerun()  # 칩에 붙은 순서 번호를 바로 고쳐 그린다
+            selected_cols = list(order)
 
             include_summary = st.checkbox("집계 시트 포함 (엑셀만)", value=True)
             want_zip = st.checkbox(
                 "증빙 사진 zip도 받기",
                 value=False,
-                help="행 번호에 맞춰 사진 이름을 바꿔 묶어줘요. 파일에 '증빙파일' 컬럼이 추가돼요.",
+                help="행 번호에 맞춰 사진 이름을 바꿔 묶어줘요. 파일에 '증빙파일' 칸이 추가돼요.",
             )
+            zip_items = []
+            if want_zip:
+                export_rows = export_rows.copy()
+                names_ = []
+                for no, (_, r) in enumerate(export_rows.iterrows(), start=1):
+                    rid = r.get("_id")
+                    if isinstance(rid, str) and rid in originals:
+                        src_name, src_data = originals[rid]
+                        zname = evidence_filename(no, r["사용일자"], r["상호명"], src_name)
+                        zip_items.append((zname, src_data))
+                        names_.append(zname)
+                    else:
+                        names_.append("")
+                export_rows["증빙파일"] = names_
+                selected_cols = selected_cols + ["증빙파일"]
+
+            # 미리보기 (+ 칸 이름 바꾸기)
+            st.markdown('<div class="rc-sub">미리보기</div>', unsafe_allow_html=True)
+            preview_slot = st.container()
+            rename_map = {}
+            with st.popover("칸 이름 바꾸기", width="stretch", icon=":material/edit:"):
+                st.caption("엑셀 맨 윗줄에 들어갈 이름이에요.")
+                for c in selected_cols:
+                    rename_map[c] = st.text_input(c, value=c, key=f"rename_{c}")
+            headers, duplicated = resolve_headers(selected_cols, rename_map)
+            if selected_cols and not duplicated:
+                preview = export_rows[selected_cols].head(5).copy()
+                if "결제금액" in preview.columns:
+                    preview["결제금액"] = preview["결제금액"].map(
+                        lambda v: "" if pd.isna(v) else f"{v:,.2f}".rstrip("0").rstrip(".")
+                    )
+                preview.columns = [headers[c] for c in selected_cols]
+                more = f" 중 앞의 {len(preview)}건" if len(export_rows) > len(preview) else ""
+                preview_slot.dataframe(preview, hide_index=True, width="stretch")
+                preview_slot.caption(f"전체 {len(export_rows)}건{more}")
+            elif not selected_cols:
+                preview_slot.caption("넣을 칸을 하나 이상 골라 주세요.")
 
         # 받기 버튼은 세부 설정 바로 아래 (설정을 고르고 바로 받게)
         download_slot = st.empty()
@@ -730,23 +769,6 @@ if work:
                 )
             st.markdown('<div class="rc-sum">' + "".join(lines) + "</div>", unsafe_allow_html=True)
 
-        zip_items = []
-        if want_zip:
-            export_rows = export_rows.copy()
-            names_ = []
-            for no, (_, r) in enumerate(export_rows.iterrows(), start=1):
-                rid = r.get("_id")
-                if isinstance(rid, str) and rid in originals:
-                    src_name, src_data = originals[rid]
-                    zname = evidence_filename(no, r["사용일자"], r["상호명"], src_name)
-                    zip_items.append((zname, src_data))
-                    names_.append(zname)
-                else:
-                    names_.append("")
-            export_rows["증빙파일"] = names_
-            selected_cols = selected_cols + ["증빙파일"]
-
-        headers, duplicated = resolve_headers(selected_cols, rename_map)
 
         if export_rows.empty:
             download_slot.info("내보낼 영수증이 없어요.")
