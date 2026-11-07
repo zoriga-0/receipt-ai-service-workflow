@@ -224,6 +224,7 @@ receipt-ai-service-workflow/
 
 | 이름 |
 |---|
+| 강다연 |
 | 박봄 |
 
 ---
