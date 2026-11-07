@@ -453,12 +453,21 @@ def edit_dialog(idx, review_mode: bool):
             f_cur = b2.selectbox("통화", curs, index=curs.index(cur_now))
             f_purpose = st.text_input("목적", value=text(row["목적"]))
             f_memo = st.text_area("사유 메모 (엑셀 '사유' 칸)", value=text(row["사유"]), height=80)
-            done = st.form_submit_button(
-                "확인 완료 → 다음" if review_mode else "확인 완료", type="primary", width="stretch"
-            )
-            s1, s2 = st.columns(2)
-            keep = s1.form_submit_button("수정만 저장", width="stretch")
-            drop = s2.form_submit_button("이 영수증 빼기", width="stretch")
+            next_txt = " → 다음" if review_mode else ""
+            if dup_name:
+                # 중복 의심: 빼는 것이 기본 동작. 중복이 아니면 확인 완료
+                drop = st.form_submit_button(
+                    f"중복 영수증이라 빼기{next_txt}", type="primary", width="stretch",
+                    icon=":material/content_copy:",
+                )
+                s1, s2 = st.columns(2)
+                done = s1.form_submit_button(f"중복 아님 · 확인 완료{next_txt}", width="stretch")
+                keep = s2.form_submit_button("수정만 저장", width="stretch")
+            else:
+                done = st.form_submit_button(f"확인 완료{next_txt}", type="primary", width="stretch")
+                s1, s2 = st.columns(2)
+                keep = s1.form_submit_button("수정만 저장", width="stretch")
+                drop = s2.form_submit_button("이 영수증 빼기", width="stretch")
 
     if drop:
         new_df = rows.drop(index=idx).reset_index(drop=True)
@@ -483,7 +492,7 @@ def edit_dialog(idx, review_mode: bool):
     w["df"] = add_quarter(new_df)[COLUMNS + ["_id"]]
     w["latest"] = None
     w["ver"] = w.get("ver", 0) + 1
-    st.session_state.review_chain = bool(review_mode and done)
+    st.session_state.review_chain = bool(review_mode and (done or drop))
     st.rerun()
 
 
@@ -656,27 +665,7 @@ if work:
                 "파일 형식", ["엑셀", "CSV"], default="엑셀", key="out_format"
             ) or "엑셀"
         as_csv = out_format == "CSV"
-        download_slot = st.empty()
-        extra_slot = st.container()  # 안내 문구·증빙 zip 버튼 자리
-
         export_rows = edited.reset_index(drop=True)
-
-        # 구분별 합계 (원화만 금액 합계)
-        summary_df = build_summary_df(export_rows, cat_options)
-        summary_df = summary_df[summary_df["건수"] > 0].reset_index(drop=True)
-        if not summary_df.empty:
-            lines = []
-            for _, s in summary_df.iterrows():
-                is_total = s["경비구분"] == "합계"
-                cur = text(s.get("통화")) if "통화" in summary_df.columns else ""
-                amt = f'{s["금액합계"]:,.0f}' + ("원" if cur in ("", "KRW") else f" {cur}")
-                lines.append(
-                    f'<div class="rc-sum-row{" total" if is_total else ""}">'
-                    f'<span>{html.escape(text(s["경비구분"]))}'
-                    f'{"" if cur in ("", "KRW") or is_total else f" · {html.escape(cur)}"}</span>'
-                    f'<span>{int(s["건수"])}건</span><b>{amt}</b></div>'
-                )
-            st.markdown('<div class="rc-sum">' + "".join(lines) + "</div>", unsafe_allow_html=True)
 
         # 엑셀에 넣을 칸: 정산에 필요한 칸만 기본으로 넣는다.
         # (목적은 경비구분을 정하려고 받는 입력값, 검토여부·사유·파일명은 앱 안에서 쓰는 칸)
@@ -719,6 +708,27 @@ if work:
                 value=False,
                 help="행 번호에 맞춰 사진 이름을 바꿔 묶어줘요. 파일에 '증빙파일' 컬럼이 추가돼요.",
             )
+
+        # 받기 버튼은 세부 설정 바로 아래 (설정을 고르고 바로 받게)
+        download_slot = st.empty()
+        extra_slot = st.container()  # 안내 문구·증빙 zip 버튼 자리
+
+        # 구분별 합계 (원화만 금액 합계)
+        summary_df = build_summary_df(export_rows, cat_options)
+        summary_df = summary_df[summary_df["건수"] > 0].reset_index(drop=True)
+        if not summary_df.empty:
+            lines = []
+            for _, s in summary_df.iterrows():
+                is_total = s["경비구분"] == "합계"
+                cur = text(s.get("통화")) if "통화" in summary_df.columns else ""
+                amt = f'{s["금액합계"]:,.0f}' + ("원" if cur in ("", "KRW") else f" {cur}")
+                lines.append(
+                    f'<div class="rc-sum-row{" total" if is_total else ""}">'
+                    f'<span>{html.escape(text(s["경비구분"]))}'
+                    f'{"" if cur in ("", "KRW") or is_total else f" · {html.escape(cur)}"}</span>'
+                    f'<span>{int(s["건수"])}건</span><b>{amt}</b></div>'
+                )
+            st.markdown('<div class="rc-sum">' + "".join(lines) + "</div>", unsafe_allow_html=True)
 
         zip_items = []
         if want_zip:
