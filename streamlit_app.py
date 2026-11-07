@@ -411,50 +411,54 @@ def edit_dialog(idx, review_mode: bool):
         else:
             target.download_button("원본 내려받기", data_, file_name=name_, key=f"dl_{caption}_{name_}")
 
-    if has_photo and dup_name:
-        with st.container(key="row_dup_photos"):
-            p1, p2 = st.columns(2)
-        show_photo(p1, w["originals"][rid], "이 영수증")
-        if dup_photo:
-            show_photo(p2, dup_photo, f"겹치는 영수증 · {dup_photo[0]}")
+    # PC: 왼쪽 사진, 오른쪽 입력칸 (사진을 보며 고친다) / 휴대폰: 위아래로 쌓인다
+    photo_col, form_col = st.columns([1.15, 1], gap="large")
+    with photo_col, st.container(key="dlg_photo"):
+        if has_photo and dup_name:
+            with st.container(key="row_dup_photos"):
+                p1, p2 = st.columns(2)
+            show_photo(p1, w["originals"][rid], "이 영수증")
+            if dup_photo:
+                show_photo(p2, dup_photo, f"겹치는 영수증 · {dup_photo[0]}")
+            else:
+                p2.caption(f"겹치는 영수증({dup_name})은 사진이 없어요. 지난 기록에서 불러온 행이에요.")
+        elif has_photo:
+            src_name, _ = w["originals"][rid]
+            show_photo(st, w["originals"][rid], src_name)
         else:
-            p2.caption(f"겹치는 영수증({dup_name})은 사진이 없어요. 지난 기록에서 불러온 행이에요.")
-    elif has_photo:
-        src_name, _ = w["originals"][rid]
-        show_photo(st, w["originals"][rid], src_name)
-    else:
-        st.caption("원본 사진이 없는 행이에요. (지난 기록에서 불러왔거나 직접 추가한 행)")
-    if text(row["사유"]):
-        if text(row["검토여부"]) == "검토 필요":
-            st.warning(text(row["사유"]))
-        else:
-            st.caption("AI 판단: " + text(row["사유"]))
+            st.caption("원본 사진이 없는 행이에요. (지난 기록에서 불러왔거나 직접 추가한 행)")
+    with form_col:
+        if text(row["사유"]):
+            if text(row["검토여부"]) == "검토 필요":
+                st.warning(text(row["사유"]))
+            else:
+                st.caption("AI 판단: " + text(row["사유"]))
 
-    cats = list(w.get("categories") or CATEGORIES)
-    cats += [c for c in [text(row["경비구분"])] if c and c not in cats]
-    curs = sorted(set(CURRENCIES) | {text(row["통화"]) or "KRW"})
-    with st.form(f"edit_{idx}", border=False):
-        with st.container(key="row_dlg_a"):
-            a1, a2 = st.columns(2)
-        f_date = a1.text_input("사용일자", value=text(row["사용일자"]), placeholder="2026-11-03")
-        f_amount = a2.text_input(
-            "결제금액", value="" if pd.isna(row["결제금액"]) else f"{row['결제금액']:,.2f}".rstrip("0").rstrip(".")
-        )
-        f_store = st.text_input("상호명", value=text(row["상호명"]))
-        with st.container(key="row_dlg_b"):
-            b1, b2 = st.columns(2)
-        cat_now = text(row["경비구분"])
-        f_cat = b1.selectbox("경비구분", cats, index=cats.index(cat_now) if cat_now in cats else len(cats) - 1)
-        cur_now = text(row["통화"]) or "KRW"
-        f_cur = b2.selectbox("통화", curs, index=curs.index(cur_now))
-        f_purpose = st.text_input("목적", value=text(row["목적"]))
-        f_memo = st.text_area("사유 메모 (엑셀 '사유' 칸)", value=text(row["사유"]), height=80)
-        done = st.form_submit_button(
-            "확인 완료 → 다음" if review_mode else "확인 완료", type="primary", width="stretch"
-        )
-        s1, s2 = st.columns(2)
-        keep = s1.form_submit_button("수정만 저장", width="stretch")
-        drop = s2.form_submit_button("이 영수증 빼기", width="stretch")
+        cats = list(w.get("categories") or CATEGORIES)
+        cats += [c for c in [text(row["경비구분"])] if c and c not in cats]
+        curs = sorted(set(CURRENCIES) | {text(row["통화"]) or "KRW"})
+        with st.form(f"edit_{idx}", border=False):
+            with st.container(key="row_dlg_a"):
+                a1, a2 = st.columns(2)
+            f_date = a1.text_input("사용일자", value=text(row["사용일자"]), placeholder="2026-11-03")
+            f_amount = a2.text_input(
+                "결제금액", value="" if pd.isna(row["결제금액"]) else f"{row['결제금액']:,.2f}".rstrip("0").rstrip(".")
+            )
+            f_store = st.text_input("상호명", value=text(row["상호명"]))
+            with st.container(key="row_dlg_b"):
+                b1, b2 = st.columns(2)
+            cat_now = text(row["경비구분"])
+            f_cat = b1.selectbox("경비구분", cats, index=cats.index(cat_now) if cat_now in cats else len(cats) - 1)
+            cur_now = text(row["통화"]) or "KRW"
+            f_cur = b2.selectbox("통화", curs, index=curs.index(cur_now))
+            f_purpose = st.text_input("목적", value=text(row["목적"]))
+            f_memo = st.text_area("사유 메모 (엑셀 '사유' 칸)", value=text(row["사유"]), height=80)
+            done = st.form_submit_button(
+                "확인 완료 → 다음" if review_mode else "확인 완료", type="primary", width="stretch"
+            )
+            s1, s2 = st.columns(2)
+            keep = s1.form_submit_button("수정만 저장", width="stretch")
+            drop = s2.form_submit_button("이 영수증 빼기", width="stretch")
 
     if drop:
         new_df = rows.drop(index=idx).reset_index(drop=True)

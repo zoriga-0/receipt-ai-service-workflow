@@ -279,6 +279,11 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
 .rc-sum-row b {{ font-family: var(--rc-num); min-width: 90px; text-align: right; }}
 .rc-sum-row.total {{ border-bottom: none; font-weight: 700; }}
 
+/* PC: 수정 창에서 왼쪽 사진은 입력칸을 내려도 따라온다 */
+@media (min-width: 641px) {{
+  .st-key-dlg_photo {{ position: sticky; top: 0; }}
+}}
+
 /* 휴대폰 */
 @media (max-width: 640px) {{
   [data-testid="stPopoverBody"] {{ max-width: calc(100vw - 24px) !important; }}
@@ -287,8 +292,8 @@ html {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
   .st-key-upload_card, .st-key-summary_card, .st-key-export_card, .st-key-login_card {{ padding: 16px 14px; }}
   .rc-total b {{ font-size: 30px; }}
   .stApp [data-testid="stFileUploaderDropzone"] {{ padding: 14px 12px; }}
-  div[role="dialog"] {{ width: 100vw !important; max-width: 100vw !important; margin: 0 !important;
-    border-radius: 16px 16px 0 0 !important; }}
+  /* 수정 창: 사진과 입력칸이 위아래로 쌓일 때 사이가 너무 벌어지지 않게 */
+  [role="dialog"] [data-testid="stHorizontalBlock"] {{ row-gap: 12px !important; }}
   /* 아이폰: 16px보다 작은 입력칸을 누르면 화면을 확대한다 */
   .stApp input, .stApp textarea {{ font-size: 16px !important; }}
   /* 손가락으로 누르기 쉬운 크기 */
